@@ -66,22 +66,25 @@ Debug UI: Kafka-UI  :8080
 ## Why these technology choices?
 
 ### Kafka (message bus)
+
 - Decouples the rate-limited GitHub poller from the slow geo-enrichment step
 - Allows multiple consumers (e.g. add a Flink job later without touching the producer)
 - Acts as a durable replay buffer — if the consumer crashes, it picks up where it left off
 
 ### TimescaleDB (storage) — not plain Postgres, not Neo4j
-| Option | Verdict |
-|---|---|
-| Plain PostgreSQL | Missing time-series indexes & compression — gets slow at scale |
+
+| Option             | Verdict                                                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Plain PostgreSQL   | Missing time-series indexes & compression — gets slow at scale                                                                       |
 | **TimescaleDB** ✅ | Hypertables = automatic chunking by time. 10-20× compression. Continuous aggregates pre-compute rollups. First-class Grafana support |
-| InfluxDB | Good for pure metrics but no SQL, weak JOIN support for enrichment queries |
-| Graph DB (Neo4j) | Excellent for "actor→repo→org" relationship queries but overkill here; you'd need a second DB for time-series anyway |
-| Cassandra | Good for write-heavy scale, but complex ops and no aggregation |
+| InfluxDB           | Good for pure metrics but no SQL, weak JOIN support for enrichment queries                                                           |
+| Graph DB (Neo4j)   | Excellent for "actor→repo→org" relationship queries but overkill here; you'd need a second DB for time-series anyway                 |
+| Cassandra          | Good for write-heavy scale, but complex ops and no aggregation                                                                       |
 
 **Verdict**: TimescaleDB gives you all of PostgreSQL (rich SQL, JOINs, JSONB for payloads) plus time-series superpowers. If you later want graph queries (e.g. "which developers contributed to the same repos?"), you can add a Neo4j container and feed it from the same Kafka topic.
 
 ### Grafana (visualisation)
+
 - Native TimescaleDB/PostgreSQL data source
 - `grafana-worldmap-panel` for the geo distribution you already have in the CLI script
 - Auto-refresh every 10 s matches the poll interval
@@ -141,10 +144,10 @@ LIMIT 20;
 
 ## Scaling up
 
-| Need | Solution |
-|---|---|
-| More throughput | Add Kafka broker nodes, increase partitions |
-| Faster enrichment | Run multiple consumer containers (same group.id = auto-balanced) |
-| Stream processing | Add Apache Flink or Spark Structured Streaming consuming from Kafka |
-| Long-term archival | Add a Kafka connector to dump to S3/GCS (Parquet) |
-| Alerts | Use Grafana alerting rules on the continuous aggregates |
+| Need               | Solution                                                            |
+| ------------------ | ------------------------------------------------------------------- |
+| More throughput    | Add Kafka broker nodes, increase partitions                         |
+| Faster enrichment  | Run multiple consumer containers (same group.id = auto-balanced)    |
+| Stream processing  | Add Apache Flink or Spark Structured Streaming consuming from Kafka |
+| Long-term archival | Add a Kafka connector to dump to S3/GCS (Parquet)                   |
+| Alerts             | Use Grafana alerting rules on the continuous aggregates             |
