@@ -1,0 +1,16 @@
+apiVersion: 1
+
+datasources:
+  - name:      TimescaleDB
+    type:      postgres
+    url:       timescaledb:5432
+    database:  github_events
+    user:      grafana_reader
+    secureJsonData:
+      password: grafana_readonly
+    jsonData:
+      sslmode:         disable
+      postgresVersion: 1600
+      timescaledb:     true    # enables TimescaleDB-specific query builder
+    isDefault: true
+    editable:  false
