@@ -12,13 +12,16 @@ Daten:
 Ziel:
 Oberziel:
 
-- Können wir eingrenzen wo innovation entsteht?
+- Metriken zu innovation
 
 detaillierteres Ziel:
 
-- können wir sogard das land eingrenzen?
+- können wir die Region eingrenzen
 
 Methode:
+
+- relevanz von repos ranken anhand von stars, activity, forks, pushes, etc.
+- relevanz von nutzern ranken anhand contributions, activity, etc.
 
 - Länder auf den Profilen der Nutzer (kurzes Experiment aht gezeigt ca 0.2% aller nutzer haben ein land eingetragen)
 - Zeitstempel-Analyse (Circadian Rhythms)
@@ -33,6 +36,7 @@ was ist innovation?
 - Kombination mit search daten von google trends
 
 Ziel:
+verschiedene insights zu innovation in github aus live daten.
 mit daten belegen wo innovation stattfindet. in welcher weltregion. ist europa wirklich so abgeschlagen wie es oft heisst?
 
 Mögliche erweiterungen:
