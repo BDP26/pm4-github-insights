@@ -1,0 +1,44 @@
+erDiagram
+    users ||--o{ events : "triggers"
+    repos ||--o{ events : "is target of"
+
+    users {
+        TEXT username PK "login"
+        TEXT company
+        TEXT location
+        TEXT country
+        CHAR country_code "2-letter ISO"
+        DOUBLE_PRECISION lat
+        DOUBLE_PRECISION lng
+        INTEGER public_repos
+        TIMESTAMPTZ last_active
+    }
+
+    repos {
+        INTEGER repo_id PK "id"
+        TEXT name
+        TEXT full_name
+        TEXT owner_login
+        TEXT description
+        TEXT language "Primary language"
+        TEXT license_spdx "e.g. MIT, Apache-2.0"
+        TEXT[] topics "Array of tags"
+        INTEGER stargazers_count
+        INTEGER watchers_count
+        INTEGER forks_count
+        INTEGER open_issues_count
+        INTEGER subscribers_count
+        INTEGER size "in KB"
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ pushed_at
+    }
+
+    events {
+        TIMESTAMPTZ time PK
+        TEXT event_id PK
+        TEXT event_type
+        TEXT actor_username FK "References users.username"
+        INTEGER repo_id FK "References repos.repo_id"
+        TEXT detail "Extracted summary"
+        JSONB payload "Raw data fallback"
+    }
