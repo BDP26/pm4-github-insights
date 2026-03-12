@@ -20,7 +20,12 @@
 #                      └─────────────┬───────────────────────────┘
 #                                    │
 #                      ┌─────────────▼───────────────────────────┐
-#                      │  Grafana  (live dashboards)              │
+#                      │  API  (FastAPI + asyncpg)  :8000         │
+#                      │  REST + SSE → Frontend                   │
+#                      └─────────────┬───────────────────────────┘
+#                                    │
+#                      ┌─────────────▼───────────────────────────┐
+#                      │  Frontend  (Next.js dashboard)  :3000    │
 #                      │  http://localhost:3000                   │
 #                      └─────────────────────────────────────────┘
 #  Debug UI: Kafka-UI at http://localhost:8080
@@ -29,7 +34,8 @@
 #    apache/kafka:3.9.0          — official ASF image (KRaft built-in)
 #    provectuslabs/kafka-ui:latest
 #    timescale/timescaledb:latest-pg16
-#    grafana/grafana:latest
+#    python:3.12-slim            — FastAPI API service (built locally)
+#    node:20-alpine              — Next.js frontend (built locally)
 # ════════════════════════════════════════════════════════════════════
 
 networks:
@@ -39,7 +45,6 @@ networks:
 volumes:
   kafka-data:
   timescale-data:
-  grafana-data:
 
 services:
 
@@ -157,6 +162,7 @@ services:
     build:
       context: ./producer
       dockerfile: Dockerfile
+    pull_policy: build
     container_name: github-producer
     networks: [github-stream]
     depends_on:
@@ -176,6 +182,7 @@ services:
     build:
       context: ./consumer
       dockerfile: Dockerfile
+    pull_policy: build
     container_name: github-consumer
     networks: [github-stream]
     depends_on:
@@ -194,22 +201,51 @@ services:
       DB_PASSWORD:             github_secret
     restart: unless-stopped
 
-  # ── Grafana ─────────────────────────────────────────────────────
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
+  # ── API (FastAPI — REST + SSE) ───────────────────────────────────
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    pull_policy: build
+    container_name: github-api
+    networks: [github-stream]
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST:     timescaledb
+      DB_PORT:     "5432"
+      DB_NAME:     github_events
+      DB_USER:     github
+      DB_PASSWORD: github_secret
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── Frontend (Next.js dashboard) ────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Baked into the Next.js client bundle at build time.
+        # Change this if the API is exposed on a different public port.
+        NEXT_PUBLIC_API_URL: "http://localhost:8000"
+    pull_policy: build
+    container_name: github-frontend
     networks: [github-stream]
     ports:
       - "3000:3000"
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
     environment:
-      GF_SECURITY_ADMIN_USER:     admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
-      GF_INSTALL_PLUGINS:         grafana-worldmap-panel,grafana-clock-panel
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/github_events.json
+      # Used by Next.js server-side rendering (internal Docker hostname)
+      API_URL: "http://api:8000"
     depends_on:
-      timescaledb:
+      api:
         condition: service_healthy
     restart: unless-stopped

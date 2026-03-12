@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+/* Tell Tailwind v4 to scan Tremor's source files so no utility classes are purged */
+@source "../../node_modules/@tremor/react/dist";
+
+:root {
+  --background: #f9fafb;
+  --foreground: #111827;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
