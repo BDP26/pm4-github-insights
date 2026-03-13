@@ -1,34 +1,59 @@
 erDiagram
     users ||--o{ events : "triggers"
+    users ||--o{ repos : "owns (personal)"
+    organizations ||--o{ repos : "owns (org-level)"
     repos ||--o{ events : "is target of"
+
+    users ||--o{ organization_members : "is member of"
+    organizations ||--o{ organization_members : "has"
 
     users {
         TEXT username PK "login"
-        TEXT company
+        TIMESTAMPTZ fetched_at
+        TEXT company "Literal string from profile"
         TEXT location
         TEXT country
-        CHAR country_code "2-letter ISO"
+        CHAR country_code
         DOUBLE_PRECISION lat
         DOUBLE_PRECISION lng
         INTEGER public_repos
+        INTEGER followers
         TIMESTAMPTZ last_active
+    }
+
+    organizations {
+        TEXT login PK
+        TIMESTAMPTZ fetched_at
+        TEXT name
+        TEXT description
+        TEXT location
+        DOUBLE_PRECISION lat
+        DOUBLE_PRECISION lng
+        BOOLEAN is_verified
+        INTEGER public_repos
+        TIMESTAMPTZ created_at
+    }
+
+    organization_members {
+        TEXT org_login FK "Ref organizations.login"
+        TEXT user_username FK "Ref users.username"
+        TEXT role "e.g. member, admin"
     }
 
     repos {
         INTEGER repo_id PK "id"
+        TIMESTAMPTZ fetched_at
         TEXT name
         TEXT full_name
-        TEXT owner_login
+        TEXT owner_login FK "Can be user or org login"
+        TEXT owner_type "User OR Organization"
         TEXT description
-        TEXT language "Primary language"
-        TEXT license_spdx "e.g. MIT, Apache-2.0"
-        TEXT[] topics "Array of tags"
+        TEXT language
+        TEXT license_spdx
+        TEXT[] topics
         INTEGER stargazers_count
-        INTEGER watchers_count
         INTEGER forks_count
-        INTEGER open_issues_count
-        INTEGER subscribers_count
-        INTEGER size "in KB"
+        INTEGER size
         TIMESTAMPTZ created_at
         TIMESTAMPTZ pushed_at
     }
@@ -37,8 +62,8 @@ erDiagram
         TIMESTAMPTZ time PK
         TEXT event_id PK
         TEXT event_type
-        TEXT actor_username FK "References users.username"
-        INTEGER repo_id FK "References repos.repo_id"
-        TEXT detail "Extracted summary"
-        JSONB payload "Raw data fallback"
+        TEXT actor_username FK "Ref users.username"
+        INTEGER repo_id FK "Ref repos.repo_id"
+        TEXT detail
+        JSONB payload
     }
