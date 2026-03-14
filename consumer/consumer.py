@@ -1,20 +1,8 @@
-"""
-GitHub Events Consumer
-──────────────────────
-Reads raw events from  github.events.raw,
-enriches each actor with geographic + profile data,
-and writes rows to TimescaleDB.
-
-Environment variables:
-  KAFKA_BOOTSTRAP_SERVERS
-  DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD
-"""
-
 import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import psycopg2
 import psycopg2.extras
@@ -30,8 +18,8 @@ log = logging.getLogger(__name__)
 
 # ── Config ───────────────────────────────────────────────────────
 BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-TOPIC_RAW         = "github.events.raw"
-GROUP_ID          = "github-events-enricher"
+TOPIC_RAW = "github.events.raw"
+GROUP_ID = "github-events-enricher"
 
 DB_DSN = (
     f"host={os.getenv('DB_HOST', 'localhost')} "
@@ -41,241 +29,244 @@ DB_DSN = (
     f"password={os.getenv('DB_PASSWORD', 'github_secret')}"
 )
 
-GITHUB_TOKEN   = os.getenv("GITHUB_TOKEN", "")
-NOMINATIM_URL  = "https://nominatim.openstreetmap.org/search"
-GITHUB_API_BASE = "https://api.github.com/users"
-
-GITHUB_HEADERS = {
-    "Accept":     "application/vnd.github+json",
-    "User-Agent": "ZHAW-BigData-Explorer/1.0",
-}
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+GITHUB_HEADERS = {"Accept": "application/vnd.github+json", "User-Agent": "ZHAW-Explorer/2.0"}
 if GITHUB_TOKEN:
     GITHUB_HEADERS["Authorization"] = f"Bearer {GITHUB_TOKEN}"
 
-NOMINATIM_HEADERS = {
-    "User-Agent":      "ZHAW-BigData-Explorer/1.0 (educational project)",
-    "Accept-Language": "en",
-}
-
-# ── In-memory caches (survive within one container lifetime) ─────
-user_cache:    dict[str, dict] = {}
-geocode_cache: dict[str, dict] = {}
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 
 
-# ── Enrichment helpers ────────────────────────────────────────────
+# ── Quota Tracking ──────────────────────────────────────────────
+class RateLimiter:
+    def __init__(self, max_per_hour):
+        self.max_per_hour = max_per_hour
+        self.calls = []
 
-def geocode(location: str) -> dict:
-    if not location:
-        return {}
-    key = location.lower().strip()
-    if key in geocode_cache:
-        return geocode_cache[key]
+    def can_call(self):
+        now = datetime.now()
+        self.calls = [t for t in self.calls if t > now - timedelta(hours=1)]
+        return len(self.calls) < self.max_per_hour
 
-    result: dict = {}
-    try:
-        r = requests.get(
-            NOMINATIM_URL,
-            headers=NOMINATIM_HEADERS,
-            params={"q": location, "format": "json", "limit": 1, "addressdetails": 1},
-            timeout=8,
-        )
-        if r.status_code == 200:
-            hits = r.json()
-            if hits:
-                h   = hits[0]
-                adr = h.get("address", {})
-                result = {
-                    "country":      adr.get("country"),
-                    "country_code": (adr.get("country_code") or "").upper()[:2] or None,
-                    "lat":          float(h.get("lat", 0)) or None,
-                    "lng":          float(h.get("lon", 0)) or None,
-                }
-    except requests.RequestException:
-        pass
-
-    geocode_cache[key] = result
-    time.sleep(1.1)   # Nominatim policy: ≤ 1 req/s
-    return result
+    def record_call(self):
+        self.calls.append(datetime.now())
 
 
-def fetch_profile(username: str) -> dict:
-    if username in user_cache:
-        return user_cache[username]
-
-    profile: dict = {
-        "location": None, "company": None, "public_repos": None,
-        "country": None, "country_code": None,
-        "lat": None, "lng": None,
-    }
-
-    try:
-        r = requests.get(
-            f"{GITHUB_API_BASE}/{username}",
-            headers=GITHUB_HEADERS,
-            timeout=8,
-        )
-        if r.status_code == 200:
-            d = r.json()
-            profile["location"]     = d.get("location") or None
-            profile["company"]      = (d.get("company") or "").strip("@ ").strip() or None
-            profile["public_repos"] = d.get("public_repos")
-    except requests.RequestException:
-        pass
-
-    if profile["location"]:
-        geo = geocode(profile["location"])
-        profile.update({k: geo.get(k) for k in ("country", "country_code", "lat", "lng")})
-
-    user_cache[username] = profile
-    return profile
+user_limiter = RateLimiter(2300)
+repo_limiter = RateLimiter(2300)
 
 
-# ── Detail extractor (mirrors the producer-side logic) ───────────
-
-def extract_detail(event: dict) -> str:
-    etype   = event.get("type", "")
-    payload = event.get("payload", {})
-    if etype == "PushEvent":
-        return f"{len(payload.get('commits', []))} commit(s)"
-    if etype in ("PullRequestEvent", "IssuesEvent"):
-        return payload.get("action", "")
-    if etype == "CreateEvent":
-        return f"{payload.get('ref_type', '')} '{payload.get('ref', '')}'"
-    if etype == "WatchEvent":
-        return payload.get("action", "starred")
-    if etype == "ReleaseEvent":
-        return f"tag {payload.get('release', {}).get('tag_name', '')}"
-    return ""
-
-
-# ── DB writer ─────────────────────────────────────────────────────
-
-INSERT_SQL = """
-INSERT INTO events (
-    time, event_id, event_type, actor, repo, detail,
-    location, country, country_code, lat, lng,
-    company, public_repos, payload
-) VALUES (
-    %(time)s, %(event_id)s, %(event_type)s, %(actor)s, %(repo)s, %(detail)s,
-    %(location)s, %(country)s, %(country_code)s, %(lat)s, %(lng)s,
-    %(company)s, %(public_repos)s, %(payload)s
-)
-ON CONFLICT DO NOTHING;
-"""
+# ── Helpers ─────────────────────────────────────────────────────
 
 def db_connect():
+    """Verbindet zur DB mit Retry-Logik, falls die DB noch startet."""
     while True:
         try:
             conn = psycopg2.connect(DB_DSN)
             log.info("Connected to TimescaleDB")
             return conn
         except psycopg2.OperationalError as e:
-            log.warning("DB not ready (%s), retrying in 3s…", e)
+            log.warning("DB not ready, retrying in 3s...")
             time.sleep(3)
 
 
-def write_event(cur, event: dict, profile: dict):
-    ts_raw = event.get("created_at", "")
+def geocode(location: str) -> dict:
+    if not location: return {}
     try:
-        ts = datetime.strptime(ts_raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    except ValueError:
-        ts = datetime.now(timezone.utc)
-
-    cur.execute(INSERT_SQL, {
-        "time":         ts,
-        "event_id":     event.get("id"),
-        "event_type":   event.get("type"),
-        "actor":        event.get("actor", {}).get("login"),
-        "repo":         event.get("repo",  {}).get("name"),
-        "detail":       extract_detail(event),
-        "location":     profile.get("location"),
-        "country":      profile.get("country"),
-        "country_code": profile.get("country_code"),
-        "lat":          profile.get("lat"),
-        "lng":          profile.get("lng"),
-        "company":      profile.get("company"),
-        "public_repos": profile.get("public_repos"),
-        "payload":      psycopg2.extras.Json(event.get("payload", {})),
-    })
+        r = requests.get(NOMINATIM_URL, params={"q": location, "format": "json", "limit": 1, "addressdetails": 1},
+                         headers={"User-Agent": "ZHAW-Explorer/2.0",
+                                  "Accept-Language": "en"},
+                         timeout=5)
+        if r.status_code == 200 and r.json():
+            h = r.json()[0]
+            adr = h.get("address", {})
+            time.sleep(1)  # Nominatim policy: 1 req/s
+            return {
+                "country": adr.get("country"),
+                "country_code": (adr.get("country_code") or "").upper()[:2],
+                "lat": float(h.get("lat")), "lng": float(h.get("lon"))
+            }
+    except:
+        pass
+    return {}
 
 
-# ── Main consumer loop ────────────────────────────────────────────
+def extract_detail(event: dict) -> str:
+    etype = event.get("type", "")
+    p = event.get("payload", {})
+    if etype == "PushEvent": return f"{len(p.get('commits', []))} commits"
+    if etype == "WatchEvent": return "starred"
+    if etype == "CreateEvent": return f"created {p.get('ref_type')}"
+    if etype == "ForkEvent": return f"forked to {p.get('forkee', {}).get('full_name')}"
+    return ""
+
+
+# ── Enrichment ──────────────────────────────────────────────────
+
+def enrich_user(cur, username):
+    cur.execute("SELECT username FROM users WHERE username = %s", (username,))
+    if cur.fetchone(): return True
+    cur.execute("SELECT login FROM organizations WHERE login = %s", (username,))
+    if cur.fetchone(): return True
+
+    if not user_limiter.can_call(): return False
+
+    try:
+        r = requests.get(f"https://api.github.com/users/{username}", headers=GITHUB_HEADERS, timeout=5)
+        user_limiter.record_call()
+        if r.status_code == 200:
+            d = r.json()
+            if d.get("type") == "User":
+                geo = geocode(d.get("location"))
+                cur.execute("""
+                            INSERT INTO users (username, fetched_at, company, location, country, country_code, lat, lng,
+                                               public_repos, followers)
+                            VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING
+                            """, (d['login'], d.get('company'), d.get('location'), geo.get('country'),
+                                  geo.get('country_code'),
+                                  geo.get('lat'), geo.get('lng'), d.get('public_repos'), d.get('followers')))
+            else:
+                cur.execute("""
+                            INSERT INTO organizations (login, fetched_at, name, description, location, public_repos,
+                                                       created_at)
+                            VALUES (%s, NOW(), %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING
+                            """,
+                            (d['login'], d.get('name'), d.get('description'), d.get('location'), d.get('public_repos'),
+                             d.get('created_at')))
+            return True
+    except Exception as e:
+        log.error(f"User API Error: {e}")
+    return False
+
+
+def enrich_repo(cur, full_name):
+    cur.execute("SELECT repo_id FROM repos WHERE full_name = %s", (full_name,))
+    if cur.fetchone(): return True
+    if not repo_limiter.can_call(): return False
+
+    try:
+        r = requests.get(f"https://api.github.com/repos/{full_name}", headers=GITHUB_HEADERS, timeout=5)
+        repo_limiter.record_call()
+        if r.status_code == 200:
+            d = r.json()
+            cur.execute("""
+                        INSERT INTO repos (repo_id, fetched_at, name, full_name, owner_login, owner_type, description,
+                                           language, license_spdx, topics, stargazers_count, forks_count, size,
+                                           created_at, pushed_at)
+                        VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING
+                        """, (d['id'], d['name'], d['full_name'], d['owner']['login'], d['owner']['type'],
+                              d.get('description'),
+                              d.get('language'), (d.get('license') or {}).get('spdx_id'), d.get('topics', []),
+                              d.get('stargazers_count'), d.get('forks_count'), d.get('size'), d.get('created_at'),
+                              d.get('pushed_at')))
+            return True
+    except Exception as e:
+        log.error(f"Repo API Error: {e}")
+    return False
+
+
+# ── Main ────────────────────────────────────────────────────────
 
 def main():
-    log.info("Starting GitHub Events Consumer")
-    log.info("  Bootstrap servers : %s", BOOTSTRAP_SERVERS)
-    log.info("  Topic             : %s", TOPIC_RAW)
-    log.info("  Consumer group    : %s", GROUP_ID)
-    log.info("  TimescaleDB       : %s", DB_DSN.split("password=")[0])
+    log.info("Starting GitHub Events Consumer (Star Schema Mode)")
 
+    # 1. Kafka Consumer Initialisierung
     consumer = Consumer({
-        "bootstrap.servers":        BOOTSTRAP_SERVERS,
-        "group.id":                 GROUP_ID,
-        "auto.offset.reset":        "earliest",
-        "enable.auto.commit":       False,       # manual commit after DB write
-        "max.poll.interval.ms":     300_000,
-        "session.timeout.ms":       30_000,
+        "bootstrap.servers": BOOTSTRAP_SERVERS,
+        "group.id": GROUP_ID,
+        "auto.offset.reset": "earliest",
+        "enable.auto.commit": False
     })
     consumer.subscribe([TOPIC_RAW])
 
+    # 2. Datenbank-Verbindung (mit Retry-Logik)
     conn = db_connect()
-    cur  = conn.cursor()
-
-    processed = 0
-    errors    = 0
+    cur = conn.cursor()
 
     try:
         while True:
-            msg = consumer.poll(timeout=2.0)
-
+            msg = consumer.poll(1.0)
             if msg is None:
                 continue
-
             if msg.error():
-                if msg.error().code() == KafkaError._PARTITION_EOF:
-                    continue
-                log.error("Kafka error: %s", msg.error())
-                errors += 1
+                log.error(f"Kafka error: {msg.error()}")
                 continue
 
             try:
-                event   = json.loads(msg.value().decode("utf-8"))
-                actor   = event.get("actor", {}).get("login", "")
-                profile = fetch_profile(actor)
+                # Daten aus Kafka-Message parsen
+                event = json.loads(msg.value().decode("utf-8"))
+                actor = event.get("actor", {}).get("login")
+                repo_id = event.get("repo", {}).get("id")
+                repo_name = event.get("repo", {}).get("name")
 
-                write_event(cur, event, profile)
+                if not actor or not repo_id:
+                    continue
+
+                # --- STUFE 1: Stammdaten-Anreicherung (Enrichment) ---
+                # Actor (User) anlegen/anreichern
+                enrich_user(cur, actor)
+
+                # Repository anlegen/anreichern
+                enrich_repo(cur, repo_name)
+
+                # --- STUFE 2: Relationen-Learning (Membership) ---
+                # Wir prüfen, wer der Besitzer des Repos ist
+                cur.execute("SELECT owner_login, owner_type FROM repos WHERE repo_id = %s", (repo_id,))
+                res = cur.fetchone()
+
+                if res:
+                    owner_login, owner_type = res
+
+                    if owner_type == 'Organization':
+                        # KRITISCH: Damit der Foreign Key in organization_members nicht knallt,
+                        # müssen wir sicherstellen, dass die Org in 'organizations' existiert.
+                        enrich_user(cur, owner_login)
+
+                        # Jetzt können wir die Verbindung gefahrlos speichern
+                        cur.execute("""
+                                    INSERT INTO organization_members (org_login, user_username, role)
+                                    VALUES (%s, %s, 'contributor') ON CONFLICT DO NOTHING
+                                    """, (owner_login, actor))
+
+                # --- STUFE 3: Event Fact-Table befüllen ---
+                ts_str = event.get("created_at", datetime.now(timezone.utc).isoformat())
+                ts = datetime.strptime(ts_str.replace("Z", "+00:00"), "%Y-%m-%dT%H:%M:%S%z")
+
+                cur.execute("""
+                            INSERT INTO events (time, event_id, event_type, actor_username, repo_id, detail, payload)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (time, event_id) DO NOTHING
+                            """, (
+                                ts,
+                                event['id'],
+                                event['type'],
+                                actor,
+                                repo_id,
+                                extract_detail(event),
+                                psycopg2.extras.Json(event.get('payload'))
+                            ))
+
+                # Transaktion abschließen
                 conn.commit()
                 consumer.commit(asynchronous=False)
 
-                processed += 1
-                if processed % 50 == 0:
-                    log.info(
-                        "Processed %d events | users cached: %d | geocodes: %d | errors: %d",
-                        processed, len(user_cache), len(geocode_cache), errors,
-                    )
-
-            except (json.JSONDecodeError, KeyError) as exc:
-                log.warning("Skipping malformed message: %s", exc)
+            except Exception as e:
                 conn.rollback()
-                errors += 1
-            except psycopg2.Error as exc:
-                log.error("DB write failed: %s", exc)
-                conn.rollback()
-                # Re-connect if connection was lost
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-                conn = db_connect()
-                cur  = conn.cursor()
-                errors += 1
+                log.error(f"Processing Error: {e}")
+                # Bei DB-Verbindungsabbruch neu verbinden
+                if "connection" in str(e).lower():
+                    conn = db_connect()
+                    cur = conn.cursor()
 
     except KeyboardInterrupt:
-        log.info("Shutting down…")
+        log.info("Consumer stopped by user")
     finally:
-        consumer.close()
+        cur.close()
         conn.close()
+        consumer.close()
 
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()
