@@ -1,41 +1,5 @@
 # ════════════════════════════════════════════════════════════════════
 #  GitHub Events Streaming Stack
-#  ┌──────────────┐    ┌─────────────────────────────────────────┐
-#  │   Producer   │───▶│  Kafka (KRaft, no Zookeeper)            │
-#  │ (GitHub API) │    │  Topics:                                │
-#  └──────────────┘    │    github.events.raw     (raw JSON)     │
-#                      └─────────────┬───────────────────────────┘
-#                                    │
-#                      ┌─────────────▼───────────────────────────┐
-#                      │  Consumer / Enricher (Python)            │
-#                      │  • Fetches GitHub profile + geo data     │
-#                      │  • Writes enriched rows → TimescaleDB   │
-#                      └─────────────┬───────────────────────────┘
-#                                    │
-#                      ┌─────────────▼───────────────────────────┐
-#                      │  TimescaleDB (PostgreSQL + time-series)  │
-#                      │  • events        (hypertable)            │
-#                      │  • country_stats (continuous aggregate)  │
-#                      │  • event_stats   (continuous aggregate)  │
-#                      └─────────────┬───────────────────────────┘
-#                                    │
-#                      ┌─────────────▼───────────────────────────┐
-#                      │  API  (FastAPI + asyncpg)  :8000         │
-#                      │  REST + SSE → Frontend                   │
-#                      └─────────────┬───────────────────────────┘
-#                                    │
-#                      ┌─────────────▼───────────────────────────┐
-#                      │  Frontend  (Next.js dashboard)  :3000    │
-#                      │  http://localhost:3000                   │
-#                      └─────────────────────────────────────────┘
-#  Debug UI: Kafka-UI at http://localhost:8080
-#
-#  Images used (all freely available on Docker Hub):
-#    apache/kafka:3.9.0          — official ASF image (KRaft built-in)
-#    provectuslabs/kafka-ui:latest
-#    timescale/timescaledb:latest-pg16
-#    python:3.12-slim            — FastAPI API service (built locally)
-#    node:20-alpine              — Next.js frontend (built locally)
 # ════════════════════════════════════════════════════════════════════
 
 networks:
@@ -45,48 +9,37 @@ networks:
 volumes:
   kafka-data:
   timescale-data:
+  grafana-data: # <--- Wichtig: Hier definiert für Persistenz
 
 services:
 
-  # ── Kafka (KRaft combined mode — broker + controller in one) ────
-  # Uses the official apache/kafka image (ASF).
-  # Bitnami images were removed from Docker Hub in Sept 2025.
-  # apache/kafka env vars do NOT use the KAFKA_CFG_ prefix.
+  # ── Kafka (KRaft mode) ──────────────────────────────────────────
   kafka:
     image: apache/kafka:3.9.0
     container_name: kafka
     hostname: kafka
     networks: [github-stream]
     ports:
-      - "9092:9092"    # used by other containers on the Docker network
-      - "9094:9094"    # mapped to host for local CLI / testing
+      - "9092:9092"
+      - "9094:9094"
     volumes:
       - kafka-data:/var/lib/kafka/data
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-
-      # Two listeners:
-      #   PLAINTEXT  → internal Docker traffic (kafka:9092)
-      #   EXTERNAL   → host-machine access     (localhost:9094)
       KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_DEFAULT_REPLICATION_FACTOR: 1
       KAFKA_NUM_PARTITIONS: 3
       KAFKA_LOG_RETENTION_HOURS: 48
-      KAFKA_LOG_RETENTION_BYTES: 536870912    # 512 MB cap per partition
-
-      # Stable cluster ID (base64-encoded 16-byte UUID).
-      # Generate your own with: python3 -c "import uuid,base64; print(base64.urlsafe_b64encode(uuid.uuid4().bytes).decode().rstrip('='))"
+      KAFKA_LOG_RETENTION_BYTES: 536870912
       CLUSTER_ID: "Mk3OEYBSD34fcwNTJENDM2Qk"
-
     healthcheck:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
       interval: 15s
@@ -94,7 +47,7 @@ services:
       retries: 8
       start_period: 30s
 
-  # ── Kafka UI (debug / monitoring) ──────────────────────────────
+  # ── Kafka UI ───────────────────────────────────────────────────
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
@@ -108,7 +61,7 @@ services:
       kafka:
         condition: service_healthy
 
-  # ── Topic initialisation (runs once then exits) ─────────────────
+  # ── Topic initialisation ───────────────────────────────────────
   kafka-init:
     image: apache/kafka:3.9.0
     container_name: kafka-init
@@ -120,24 +73,13 @@ services:
     command: |
       "
       echo '--- Creating Kafka topics ---'
-      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 \
-        --create --if-not-exists \
-        --topic github.events.raw \
-        --partitions 3 --replication-factor 1 \
-        --config retention.ms=172800000
-
-      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 \
-        --create --if-not-exists \
-        --topic github.events.enriched \
-        --partitions 3 --replication-factor 1 \
-        --config retention.ms=172800000
-
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic github.events.raw --partitions 3 --replication-factor 1
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic github.events.enriched --partitions 3 --replication-factor 1
       echo '--- Topics ready ---'
-      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
       "
     restart: "no"
 
-  # ── TimescaleDB ─────────────────────────────────────────────────
+  # ── TimescaleDB ────────────────────────────────────────────────
   timescaledb:
     image: timescale/timescaledb:latest-pg16
     container_name: timescaledb
@@ -157,19 +99,14 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── GitHub API Producer ─────────────────────────────────────────
+  # ── GitHub API Producer ────────────────────────────────────────
   producer:
-    build:
-      context: ./producer
-      dockerfile: Dockerfile
-    pull_policy: build
+    build: ./producer
     container_name: github-producer
     networks: [github-stream]
     depends_on:
       kafka:
         condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       GITHUB_TOKEN:            ${GITHUB_TOKEN:-}
@@ -177,12 +114,9 @@ services:
       MAX_PAGES:               "3"
     restart: unless-stopped
 
-  # ── Consumer / Enricher / DB Writer ────────────────────────────
+  # ── Consumer / Enricher ────────────────────────────────────────
   consumer:
-    build:
-      context: ./consumer
-      dockerfile: Dockerfile
-    pull_policy: build
+    build: ./consumer
     container_name: github-consumer
     networks: [github-stream]
     depends_on:
@@ -190,11 +124,9 @@ services:
         condition: service_healthy
       timescaledb:
         condition: service_healthy
-      kafka-init:
-        condition: service_completed_successfully
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_TOKEN:            ${GITHUB_TOKEN:-}
       DB_HOST:                 timescaledb
       DB_PORT:                 "5432"
       DB_NAME:                 github_events
@@ -202,12 +134,9 @@ services:
       DB_PASSWORD:             github_secret
     restart: unless-stopped
 
-  # ── API (FastAPI — REST + SSE) ───────────────────────────────────
+  # ── API (FastAPI) ──────────────────────────────────────────────
   api:
-    build:
-      context: ./api
-      dockerfile: Dockerfile
-    pull_policy: build
+    build: ./api
     container_name: github-api
     networks: [github-stream]
     ports:
@@ -221,32 +150,38 @@ services:
     depends_on:
       timescaledb:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
     restart: unless-stopped
 
-  # ── Frontend (Next.js dashboard) ────────────────────────────────
+  # ── Frontend (Next.js) ─────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
       args:
-        # Baked into the Next.js client bundle at build time.
-        # Change this if the API is exposed on a different public port.
         NEXT_PUBLIC_API_URL: "http://localhost:8000"
-    pull_policy: build
     container_name: github-frontend
     networks: [github-stream]
     ports:
       - "3000:3000"
     environment:
-      # Used by Next.js server-side rendering (internal Docker hostname)
       API_URL: "http://api:8000"
     depends_on:
       api:
         condition: service_healthy
     restart: unless-stopped
+
+  # ── Grafana (Visualisation) ────────────────────────────────────
+  grafana:
+      image: grafana/grafana-oss:latest
+      container_name: grafana
+      networks: [github-stream]
+      ports:
+        - "3001:3000"
+      environment:
+        - GF_SECURITY_ADMIN_PASSWORD=admin
+      volumes:
+        - grafana-data:/var/lib/grafana
+        # HIER DIE MAGIE: Lokale Dateien in den Container mounten
+        - ./grafana/provisioning:/etc/grafana/provisioning
+      depends_on:
+        timescaledb:
+          condition: service_healthy

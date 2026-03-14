@@ -1,0 +1,13 @@
+apiVersion: 1
+datasources:
+  - name: PostgreSQL
+    type: postgres
+    url: timescaledb:5432
+    database: github_events
+    user: github
+    secureJsonData:
+      password: github_secret
+    jsonData:
+      sslmode: 'disable'
+      postgresVersion: 15
+      timescaledb: true
