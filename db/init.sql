@@ -163,3 +163,27 @@ BEGIN
   END IF;
 END
 $$;
+
+-- ════════════════════════════════════════════════════════════════
+--  Operational: Request Logs
+-- ════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS request_logs (
+    id               SERIAL PRIMARY KEY,
+    request_success  BOOLEAN,
+    sent_at          TIMESTAMPTZ,
+    received_at      TIMESTAMPTZ,
+    elapsed_s        FLOAT,
+    method           TEXT,
+    url              TEXT,
+    status_code      INTEGER,
+    reason           TEXT,
+    response_bytes   INTEGER,
+    redirects        INTEGER,
+    final_url        TEXT,
+    http_version     INTEGER,
+    encoding         TEXT,
+    request_headers  JSONB,
+    response_headers JSONB,
+    error            TEXT
+);

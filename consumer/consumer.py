@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 # ── Config ───────────────────────────────────────────────────────
 BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 TOPIC_RAW = "github.events.raw"
+TOPIC_STATUS = "github.events.status"
 GROUP_ID = "github-events-enricher"
 
 DB_DSN = (
@@ -164,6 +165,36 @@ def enrich_repo(cur, full_name):
         log.error(f"Repo API Error: {e}")
     return False
 
+def insert_request_meta(cur, meta: dict) -> None:
+    """Insert a request metadata record into request_logs."""
+    cur.execute("""
+        INSERT INTO request_logs (
+            request_success, sent_at, received_at, elapsed_s,
+            method, url, status_code, reason, response_bytes,
+            redirects, final_url, http_version, encoding,
+            request_headers, response_headers, error
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s
+        )
+    """, (
+        meta.get("request_success"),
+        meta.get("sent_at"),
+        meta.get("received_at"),
+        meta.get("elapsed_s"),
+        meta.get("method"),
+        meta.get("url"),
+        meta.get("status_code"),
+        meta.get("reason"),
+        meta.get("response_bytes"),
+        meta.get("redirects"),
+        meta.get("final_url"),
+        meta.get("http_version"),
+        meta.get("encoding"),
+        psycopg2.extras.Json(meta.get("request_headers")),
+        psycopg2.extras.Json(meta.get("response_headers")),
+        meta.get("error"),
+    ))
 
 # ── Main ────────────────────────────────────────────────────────
 
@@ -177,7 +208,7 @@ def main():
         "auto.offset.reset": "earliest",
         "enable.auto.commit": False
     })
-    consumer.subscribe([TOPIC_RAW])
+    consumer.subscribe([TOPIC_RAW, TOPIC_STATUS])
 
     # 2. Datenbank-Verbindung (mit Retry-Logik)
     conn = db_connect()
@@ -195,6 +226,11 @@ def main():
             try:
                 # Daten aus Kafka-Message parsen
                 event = json.loads(msg.value().decode("utf-8"))
+                if msg.topic() == TOPIC_STATUS:
+                    insert_request_meta(cur, event)
+                    conn.commit()
+                    consumer.commit(asynchronous=False)
+                    continue
                 actor = event.get("actor", {}).get("login")
                 repo_id = event.get("repo", {}).get("id")
                 repo_name = event.get("repo", {}).get("name")
@@ -264,9 +300,6 @@ def main():
         conn.close()
         consumer.close()
 
-
-if __name__ == "__main__":
-    main()
 
 if __name__ == "__main__":
     main()

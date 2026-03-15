@@ -207,19 +207,16 @@ def publish_events(producer: Producer, events: list[dict]) -> int:
     return len(events)
 
 
-def publish_status(producer: Producer, status: str) -> None:
+def publish_status(producer: Producer, meta: dict) -> None:
     """Publish a status message to Kafka."""
-    meta = {
-        "status": status,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+
     producer.produce(
         topic     = TOPIC_STATUS,
         key       = f"status-{int(time.time())}",
         value     = json.dumps(meta),
         callback  = delivery_report,
     )
-    producer.flush(timeout=10)
+
 
 
 
@@ -228,7 +225,7 @@ def main():
 
     log.info("Starting GitHub Events Producer")
     log.info("  Bootstrap servers : %s", BOOTSTRAP_SERVERS)
-    log.info("  Topic             : %s", TOPIC_RAW)
+    log.info("  Topic             : %s", TOPIC_RAW , "and", TOPIC_STATUS)
     log.info("  Poll interval     : %ds", POLL_INTERVAL)
     log.info("  GitHub auth       : %s", "yes (token)" if TOKEN else "no (60 req/h limit)")
 
@@ -239,6 +236,9 @@ def main():
         events, metas = fetch_events()
 
         if metas:
+            for meta in metas: # publish ALL metas for observability
+                publish_status(producer=producer, meta=meta)
+            producer.flush(timeout=10)
             last_meta = metas[-1]  # last page meta
             log.info(
                 "Poll #%d → fetched %d events | request success: %s | status code: %s | elapsed: %.2fs",
