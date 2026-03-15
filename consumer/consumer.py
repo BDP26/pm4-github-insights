@@ -105,6 +105,8 @@ def extract_detail(event: dict) -> str:
 # ── Enrichment ──────────────────────────────────────────────────
 
 def enrich_user(cur, username):
+    if username.endswith("[bot]"):
+        return False  # skip bots
     cur.execute("SELECT username FROM users WHERE username = %s", (username,))
     if cur.fetchone(): return True
     cur.execute("SELECT login FROM organizations WHERE login = %s", (username,))
@@ -216,82 +218,94 @@ def main():
 
     try:
         while True:
-            msg = consumer.poll(1.0)
-            if msg is None:
-                continue
-            if msg.error():
-                log.error(f"Kafka error: {msg.error()}")
+            # Batch-poll: drain all available messages, process STATUS first
+            batch = consumer.consume(num_messages=100, timeout=1.0)
+            if not batch:
                 continue
 
-            try:
-                # Daten aus Kafka-Message parsen
-                event = json.loads(msg.value().decode("utf-8"))
-                if msg.topic() == TOPIC_STATUS:
-                    insert_request_meta(cur, event)
+            # Separate STATUS from RAW so status/request_logs are never blocked by slow enrichment
+            status_msgs = []
+            raw_msgs = []
+            for m in batch:
+                if m.error():
+                    log.error(f"Kafka error: {m.error()}")
+                    continue
+                if m.topic() == TOPIC_STATUS:
+                    status_msgs.append(m)
+                else:
+                    raw_msgs.append(m)
+
+            # Process all STATUS messages first (fast inserts)
+            for m in status_msgs:
+                try:
+                    meta = json.loads(m.value().decode("utf-8"))
+                    insert_request_meta(cur, meta)
                     conn.commit()
-                    consumer.commit(asynchronous=False)
-                    continue
-                actor = event.get("actor", {}).get("login")
-                repo_id = event.get("repo", {}).get("id")
-                repo_name = event.get("repo", {}).get("name")
+                    consumer.commit(message=m, asynchronous=False)
+                except Exception as e:
+                    conn.rollback()
+                    log.error(f"Status Processing Error: {e}")
+                    if "connection" in str(e).lower():
+                        conn = db_connect()
+                        cur = conn.cursor()
 
-                if not actor or not repo_id:
-                    continue
+            # Then process RAW events
+            for msg in raw_msgs:
+                try:
+                    event = json.loads(msg.value().decode("utf-8"))
+                    actor = event.get("actor", {}).get("login")
+                    repo_id = event.get("repo", {}).get("id")
+                    repo_name = event.get("repo", {}).get("name")
 
-                # --- STUFE 1: Stammdaten-Anreicherung (Enrichment) ---
-                # Actor (User) anlegen/anreichern
-                enrich_user(cur, actor)
+                    if not actor or not repo_id:
+                        continue
 
-                # Repository anlegen/anreichern
-                enrich_repo(cur, repo_name)
+                    # --- STUFE 1: Stammdaten-Anreicherung (Enrichment) ---
+                    enrich_user(cur, actor)
+                    enrich_repo(cur, repo_name)
 
-                # --- STUFE 2: Relationen-Learning (Membership) ---
-                # Wir prüfen, wer der Besitzer des Repos ist
-                cur.execute("SELECT owner_login, owner_type FROM repos WHERE repo_id = %s", (repo_id,))
-                res = cur.fetchone()
+                    # --- STUFE 2: Relationen-Learning (Membership) ---
+                    cur.execute("SELECT owner_login, owner_type FROM repos WHERE repo_id = %s", (repo_id,))
+                    res = cur.fetchone()
 
-                if res:
-                    owner_login, owner_type = res
+                    if res:
+                        owner_login, owner_type = res
 
-                    if owner_type == 'Organization':
-                        # KRITISCH: Damit der Foreign Key in organization_members nicht knallt,
-                        # müssen wir sicherstellen, dass die Org in 'organizations' existiert.
-                        enrich_user(cur, owner_login)
-
-                        # Jetzt können wir die Verbindung gefahrlos speichern
-                        cur.execute("""
+                        if owner_type == 'Organization':
+                            enrich_user(cur, owner_login)
+                            cur.execute("SELECT username FROM users WHERE username = %s", (actor,))
+                            if cur.fetchone():
+                                cur.execute("""
                                     INSERT INTO organization_members (org_login, user_username, role)
                                     VALUES (%s, %s, 'contributor') ON CONFLICT DO NOTHING
-                                    """, (owner_login, actor))
+                                """, (owner_login, actor))
 
-                # --- STUFE 3: Event Fact-Table befüllen ---
-                ts_str = event.get("created_at", datetime.now(timezone.utc).isoformat())
-                ts = datetime.strptime(ts_str.replace("Z", "+00:00"), "%Y-%m-%dT%H:%M:%S%z")
+                    # --- STUFE 3: Event Fact-Table befüllen ---
+                    ts_str = event.get("created_at", datetime.now(timezone.utc).isoformat())
+                    ts = datetime.strptime(ts_str.replace("Z", "+00:00"), "%Y-%m-%dT%H:%M:%S%z")
 
-                cur.execute("""
-                            INSERT INTO events (time, event_id, event_type, actor_username, repo_id, detail, payload)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (time, event_id) DO NOTHING
-                            """, (
-                                ts,
-                                event['id'],
-                                event['type'],
-                                actor,
-                                repo_id,
-                                extract_detail(event),
-                                psycopg2.extras.Json(event.get('payload'))
-                            ))
+                    cur.execute("""
+                        INSERT INTO events (time, event_id, event_type, actor_username, repo_id, detail, payload)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (time, event_id) DO NOTHING
+                    """, (
+                        ts,
+                        event['id'],
+                        event['type'],
+                        actor,
+                        repo_id,
+                        extract_detail(event),
+                        psycopg2.extras.Json(event.get('payload'))
+                    ))
 
-                # Transaktion abschließen
-                conn.commit()
-                consumer.commit(asynchronous=False)
+                    conn.commit()
+                    consumer.commit(message=msg, asynchronous=False)
 
-            except Exception as e:
-                conn.rollback()
-                log.error(f"Processing Error: {e}")
-                # Bei DB-Verbindungsabbruch neu verbinden
-                if "connection" in str(e).lower():
-                    conn = db_connect()
-                    cur = conn.cursor()
+                except Exception as e:
+                    conn.rollback()
+                    log.error(f"Processing Error: {e}")
+                    if "connection" in str(e).lower():
+                        conn = db_connect()
+                        cur = conn.cursor()
 
     except KeyboardInterrupt:
         log.info("Consumer stopped by user")

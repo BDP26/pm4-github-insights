@@ -135,7 +135,7 @@ def logged_request(METHOD: str, URL: str, **kwargs) -> tuple:
 
 
 
-def fetch_events() -> tuple[list[dict], list[dict]]:
+def fetch_events(producer: Producer) -> tuple[list[dict], list[dict]]:
     """Fetch new events from the GitHub API, skipping already-seen IDs."""
     global last_etag, sent_total
 
@@ -153,6 +153,8 @@ def fetch_events() -> tuple[list[dict], list[dict]]:
                 timeout=10
             )
             new_metas.append(meta)
+            publish_status(producer=producer, meta=meta)
+            producer.flush(timeout=10)
 
             # LOGGING FOR DEBUG PURPOSES
 
@@ -225,7 +227,7 @@ def main():
 
     log.info("Starting GitHub Events Producer")
     log.info("  Bootstrap servers : %s", BOOTSTRAP_SERVERS)
-    log.info("  Topic             : %s", TOPIC_RAW , "and", TOPIC_STATUS)
+    log.info("  Topic             : %s and %s", TOPIC_RAW, TOPIC_STATUS)
     log.info("  Poll interval     : %ds", POLL_INTERVAL)
     log.info("  GitHub auth       : %s", "yes (token)" if TOKEN else "no (60 req/h limit)")
 
@@ -233,12 +235,9 @@ def main():
 
     while True:
         poll_count += 1
-        events, metas = fetch_events()
+        events, metas = fetch_events(producer=producer)
 
         if metas:
-            for meta in metas: # publish ALL metas for observability
-                publish_status(producer=producer, meta=meta)
-            producer.flush(timeout=10)
             last_meta = metas[-1]  # last page meta
             log.info(
                 "Poll #%d → fetched %d events | request success: %s | status code: %s | elapsed: %.2fs",
