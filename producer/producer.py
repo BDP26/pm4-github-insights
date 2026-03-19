@@ -202,8 +202,12 @@ def fetch_events(producer: Producer) -> tuple[list[dict], list[dict]]:
                 if eid and eid not in seen_ids:
                     seen_ids.add(eid)
                     new_events.append(event)
-        except Exception as exc:
+        except requests.RequestException as exc:
             log.error("Error fetching events on page %d: %s", page, exc)
+            break
+        except ValueError:
+            # JSON decoding or similar data issues
+            log.exception("Failed to decode response JSON on page %d", page)
             break
     return new_events, new_metas
 
