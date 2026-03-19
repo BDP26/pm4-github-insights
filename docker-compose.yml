@@ -9,10 +9,9 @@ networks:
 volumes:
   kafka-data:
   timescale-data:
-  grafana-data: # <--- Wichtig: Hier definiert für Persistenz
+  grafana-data:
 
 services:
-
   # ── Kafka (KRaft mode) ──────────────────────────────────────────
   kafka:
     image: apache/kafka:3.9.0
@@ -132,41 +131,6 @@ services:
       DB_NAME:                 github_events
       DB_USER:                 github
       DB_PASSWORD:             github_secret
-    restart: unless-stopped
-
-  # ── API (FastAPI) ──────────────────────────────────────────────
-  api:
-    build: ./api
-    container_name: github-api
-    networks: [github-stream]
-    ports:
-      - "8000:8000"
-    environment:
-      DB_HOST:     timescaledb
-      DB_PORT:     "5432"
-      DB_NAME:     github_events
-      DB_USER:     github
-      DB_PASSWORD: github_secret
-    depends_on:
-      timescaledb:
-        condition: service_healthy
-    restart: unless-stopped
-
-  # ── Frontend (Next.js) ─────────────────────────────────────────
-  frontend:
-    build:
-      context: ./frontend
-      args:
-        NEXT_PUBLIC_API_URL: "http://localhost:8000"
-    container_name: github-frontend
-    networks: [github-stream]
-    ports:
-      - "3000:3000"
-    environment:
-      API_URL: "http://api:8000"
-    depends_on:
-      api:
-        condition: service_healthy
     restart: unless-stopped
 
   # ── Grafana (Visualisation) ────────────────────────────────────
