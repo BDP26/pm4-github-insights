@@ -31,6 +31,7 @@ log = logging.getLogger(__name__)
 # ── Config ───────────────────────────────────────────────────────
 BOOTSTRAP_SERVERS    = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 TOPIC_RAW            = "github.events.raw"
+TOPIC_STATUS         = "github.events.status"
 POLL_INTERVAL        = int(os.getenv("POLL_INTERVAL_SECONDS", "10"))
 MAX_PAGES            = int(os.getenv("MAX_PAGES", "3"))
 TOKEN                = os.getenv("GITHUB_TOKEN", "")
@@ -71,21 +72,118 @@ poll_count: int = 0
 sent_total: int = 0
 
 
-def fetch_events() -> list[dict]:
+def _redact_headers(headers) -> dict:
+    """
+    Return a copy of the headers mapping with sensitive values redacted.
+
+    Redacts at least Authorization, Cookie, and Set-Cookie headers to avoid
+    leaking credentials into logs or Kafka topics.
+    """
+    if headers is None:
+        return {}
+    sensitive = {"authorization", "cookie", "set-cookie"}
+    redacted: dict = {}
+    for key, value in dict(headers).items():
+        if isinstance(key, str) and key.lower() in sensitive:
+            redacted[key] = "<redacted>"
+        else:
+            redacted[key] = value
+    return redacted
+
+
+def logged_request(METHOD: str, URL: str, **kwargs) -> tuple:
+    sent_at = datetime.now(timezone.utc)
+    try: 
+        r = requests.request(METHOD, URL, **kwargs)
+        received_at = datetime.now(timezone.utc)
+
+        meta = {
+            # Transport completed without raising an exception
+            "request_completed": True,
+            # HTTP-level success (status_code < 400)
+            "request_success":  r.ok,
+            # Timing
+            "sent_at":          sent_at.isoformat(),
+            "received_at":      received_at.isoformat(),
+            "elapsed_s":        r.elapsed.total_seconds(),
+            
+            # Request
+            "method":           r.request.method,
+            "url":              r.request.url,
+            "request_headers":  _redact_headers(r.request.headers),
+            
+            # Response
+            "status_code":      r.status_code,
+            "reason":           r.reason,
+            "response_bytes":   len(r.content),
+            "response_headers": _redact_headers(r.headers),
+            
+            # Extras
+            "redirects":        len(r.history),
+            "final_url":        r.url,
+            "http_version":     r.raw.version,  # 11 = HTTP/1.1
+            "encoding":         r.encoding,
+        }
+
+
+
+    except requests.RequestException as exc:
+        error_meta = {
+            "request_completed": False,
+            "request_success":  False,
+            "sent_at":          sent_at.isoformat(),
+            "received_at":      datetime.now(timezone.utc).isoformat(),
+            "error":            str(exc),
+            
+            # Request (weisst du noch)
+            "method":           METHOD,
+            "url":              URL,
+            
+            # Response
+            "status_code":      None,
+            "reason":           None,
+            "response_bytes":   None,
+            "response_headers": None,
+            
+            # Extras
+            "redirects":        None,
+            "final_url":        None,
+            "http_version":     None,
+            "encoding":         None,
+        }
+        log.warning("GitHub API request failed: %s", exc)
+        return None, error_meta
+    return r, meta
+
+
+
+
+def fetch_events(producer: Producer) -> tuple[list[dict], list[dict]]:
     """Fetch new events from the GitHub API, skipping already-seen IDs."""
     global last_etag, sent_total
 
     new_events: list[dict] = []
     etag_headers = {"If-None-Match": last_etag} if last_etag else {}
+    new_metas: list[dict] = []
 
     for page in range(1, MAX_PAGES + 1):
         try:
-            resp = requests.get(
+            resp, meta = logged_request(
+                "GET",
                 GITHUB_API_URL,
                 headers={**GITHUB_HEADERS, **etag_headers},
                 params={"per_page": 30, "page": page},
-                timeout=10,
+                timeout=10
             )
+            new_metas.append(meta)
+            publish_status(producer=producer, meta=meta)
+            producer.poll(0)
+
+            # LOGGING FOR DEBUG PURPOSES
+
+            if resp is None:
+                log.error("Failed to fetch page %d: %s", page, meta.get("error"))
+                break
 
             if resp.status_code == 304:
                 log.debug("304 Not Modified — no new events on page %d", page)
@@ -108,12 +206,14 @@ def fetch_events() -> list[dict]:
                 if eid and eid not in seen_ids:
                     seen_ids.add(eid)
                     new_events.append(event)
-
         except requests.RequestException as exc:
-            log.warning("GitHub API request failed: %s", exc)
+            log.error("Error fetching events on page %d: %s", page, exc)
             break
-
-    return new_events
+        except ValueError:
+            # JSON decoding or similar data issues
+            log.exception("Failed to decode response JSON on page %d", page)
+            break
+    return new_events, new_metas
 
 
 def publish_events(producer: Producer, events: list[dict]) -> int:
@@ -136,12 +236,25 @@ def publish_events(producer: Producer, events: list[dict]) -> int:
     return len(events)
 
 
+def publish_status(producer: Producer, meta: dict) -> None:
+    """Publish a status message to Kafka."""
+
+    producer.produce(
+        topic     = TOPIC_STATUS,
+        key       = f"status-{int(time.time())}",
+        value     = json.dumps(meta),
+        callback  = delivery_report,
+    )
+
+
+
+
 def main():
     global poll_count
 
     log.info("Starting GitHub Events Producer")
     log.info("  Bootstrap servers : %s", BOOTSTRAP_SERVERS)
-    log.info("  Topic             : %s", TOPIC_RAW)
+    log.info("  Topic             : %s and %s", TOPIC_RAW, TOPIC_STATUS)
     log.info("  Poll interval     : %ds", POLL_INTERVAL)
     log.info("  GitHub auth       : %s", "yes (token)" if TOKEN else "no (60 req/h limit)")
 
@@ -149,7 +262,14 @@ def main():
 
     while True:
         poll_count += 1
-        events = fetch_events()
+        events, metas = fetch_events(producer=producer)
+
+        if metas:
+            last_meta = metas[-1]  # last page meta
+            log.info(
+                "Poll #%d → fetched %d events | request success: %s | status code: %s | elapsed: %.2fs",
+                poll_count, len(events), last_meta.get("request_success"), last_meta.get("status_code"), last_meta.get("elapsed_s")
+            )
 
         if events:
             sent = publish_events(producer, events)
