@@ -173,7 +173,7 @@ def fetch_events(producer: Producer) -> tuple[list[dict], list[dict]]:
             )
             new_metas.append(meta)
             publish_status(producer=producer, meta=meta)
-            producer.flush(timeout=10)
+            producer.poll(0)
 
             # LOGGING FOR DEBUG PURPOSES
 
