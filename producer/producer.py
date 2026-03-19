@@ -98,7 +98,10 @@ def logged_request(METHOD: str, URL: str, **kwargs) -> tuple:
         received_at = datetime.now(timezone.utc)
 
         meta = {
-            "request_success": True,   # completed
+            # Transport completed without raising an exception
+            "request_completed": True,
+            # HTTP-level success (status_code < 400)
+            "request_success":  r.ok,
             # Timing
             "sent_at":          sent_at.isoformat(),
             "received_at":      received_at.isoformat(),
@@ -126,6 +129,7 @@ def logged_request(METHOD: str, URL: str, **kwargs) -> tuple:
 
     except requests.RequestException as exc:
         error_meta = {
+            "request_completed": False,
             "request_success":  False,
             "sent_at":          sent_at.isoformat(),
             "received_at":      datetime.now(timezone.utc).isoformat(),
