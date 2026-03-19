@@ -167,6 +167,31 @@ def enrich_repo(cur, full_name):
         log.error(f"Repo API Error: {e}")
     return False
 
+def _redact_headers(headers):
+    """Return a copy of headers with sensitive values redacted."""
+    if not isinstance(headers, dict):
+        return headers
+
+    sensitive_header_names = {
+        "authorization",
+        "proxy-authorization",
+        "cookie",
+        "set-cookie",
+        "x-api-key",
+        "x-api-token",
+        "x-auth-token",
+        "x-access-token",
+    }
+
+    redacted = {}
+    for name, value in headers.items():
+        if isinstance(name, str) and name.lower() in sensitive_header_names:
+            redacted[name] = "[REDACTED]"
+        else:
+            redacted[name] = value
+    return redacted
+
+
 def insert_request_meta(cur, meta: dict) -> None:
     """Insert a request metadata record into request_logs."""
     cur.execute("""
@@ -193,8 +218,8 @@ def insert_request_meta(cur, meta: dict) -> None:
         meta.get("final_url"),
         meta.get("http_version"),
         meta.get("encoding"),
-        psycopg2.extras.Json(meta.get("request_headers")),
-        psycopg2.extras.Json(meta.get("response_headers")),
+        psycopg2.extras.Json(_redact_headers(meta.get("request_headers"))),
+        psycopg2.extras.Json(_redact_headers(meta.get("response_headers"))),
         meta.get("error"),
     ))
 
