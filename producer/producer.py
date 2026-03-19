@@ -72,6 +72,25 @@ poll_count: int = 0
 sent_total: int = 0
 
 
+def _redact_headers(headers) -> dict:
+    """
+    Return a copy of the headers mapping with sensitive values redacted.
+
+    Redacts at least Authorization, Cookie, and Set-Cookie headers to avoid
+    leaking credentials into logs or Kafka topics.
+    """
+    if headers is None:
+        return {}
+    sensitive = {"authorization", "cookie", "set-cookie"}
+    redacted: dict = {}
+    for key, value in dict(headers).items():
+        if isinstance(key, str) and key.lower() in sensitive:
+            redacted[key] = "<redacted>"
+        else:
+            redacted[key] = value
+    return redacted
+
+
 def logged_request(METHOD: str, URL: str, **kwargs) -> tuple:
     sent_at = datetime.now(timezone.utc)
     try: 
@@ -88,13 +107,13 @@ def logged_request(METHOD: str, URL: str, **kwargs) -> tuple:
             # Request
             "method":           r.request.method,
             "url":              r.request.url,
-            "request_headers":  dict(r.request.headers),
+            "request_headers":  _redact_headers(r.request.headers),
             
             # Response
             "status_code":      r.status_code,
             "reason":           r.reason,
             "response_bytes":   len(r.content),
-            "response_headers": dict(r.headers),
+            "response_headers": _redact_headers(r.headers),
             
             # Extras
             "redirects":        len(r.history),
