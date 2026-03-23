@@ -209,3 +209,4 @@ __marimo__/
 .env
 .claude
 .DS_Store
+.env copy.example

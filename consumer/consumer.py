@@ -73,7 +73,7 @@ def db_connect():
             log.info("Connected to TimescaleDB")
             return conn
         except psycopg2.OperationalError as e:
-            log.warning("DB not ready, retrying in 3s...")
+            log.warning("DB not ready (%s), retrying in 3s...", e)
             time.sleep(3)
 
 
