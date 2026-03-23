@@ -110,7 +110,7 @@ services:
         condition: service_healthy
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      GITHUB_TOKEN:            ${GITHUB_TOKEN:-}
+      GITHUB_TOKEN_EVENTS:     ${GITHUB_TOKEN_EVENTS:-}
       POLL_INTERVAL_SECONDS:   "10"
       MAX_PAGES:               "3"
     restart: unless-stopped
@@ -128,7 +128,8 @@ services:
         condition: service_healthy
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      GITHUB_TOKEN:            ${GITHUB_TOKEN:-}
+      GITHUB_TOKEN_USER:       ${GITHUB_TOKEN_USER:-}
+      GITHUB_TOKEN_REPO:       ${GITHUB_TOKEN_REPO:-}
       DB_HOST:                 timescaledb
       DB_PORT:                 "5432"
       DB_NAME:                 github_events

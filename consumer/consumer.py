@@ -30,10 +30,16 @@ DB_DSN = (
     f"password={os.getenv('DB_PASSWORD', 'github_secret')}"
 )
 
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
-GITHUB_HEADERS = {"Accept": "application/vnd.github+json", "User-Agent": "ZHAW-Explorer/2.0"}
-if GITHUB_TOKEN:
-    GITHUB_HEADERS["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+GITHUB_TOKEN_USER = os.getenv("GITHUB_TOKEN_USER", "")
+GITHUB_TOKEN_REPO = os.getenv("GITHUB_TOKEN_REPO", "")
+
+GITHUB_HEADERS_USER = {"Accept": "application/vnd.github+json", "User-Agent": "ZHAW-Explorer/2.0"}
+if GITHUB_TOKEN_USER:
+    GITHUB_HEADERS_USER["Authorization"] = f"Bearer {GITHUB_TOKEN_USER}"
+
+GITHUB_HEADERS_REPO = {"Accept": "application/vnd.github+json", "User-Agent": "ZHAW-Explorer/2.0"}
+if GITHUB_TOKEN_REPO:
+    GITHUB_HEADERS_REPO["Authorization"] = f"Bearer {GITHUB_TOKEN_REPO}"
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 
@@ -104,7 +110,7 @@ def extract_detail(event: dict) -> str:
 
 # ── Enrichment ──────────────────────────────────────────────────
 
-def enrich_user(cur, username):
+def enrich_user(cur, conn, username):
     if username.endswith("[bot]"):
         return False  # skip bots
     cur.execute("SELECT username FROM users WHERE username = %s", (username,))
@@ -115,8 +121,9 @@ def enrich_user(cur, username):
     if not user_limiter.can_call(): return False
 
     try:
-        r = requests.get(f"https://api.github.com/users/{username}", headers=GITHUB_HEADERS, timeout=5)
+        r, meta = logged_request(cur, conn, "GET", f"https://api.github.com/users/{username}", headers=GITHUB_HEADERS_USER, timeout=5)
         user_limiter.record_call()
+        if r is None: return False
         if r.status_code == 200:
             d = r.json()
             if d.get("type") == "User":
@@ -142,14 +149,15 @@ def enrich_user(cur, username):
     return False
 
 
-def enrich_repo(cur, full_name):
+def enrich_repo(cur, conn, full_name):
     cur.execute("SELECT repo_id FROM repos WHERE full_name = %s", (full_name,))
     if cur.fetchone(): return True
     if not repo_limiter.can_call(): return False
 
     try:
-        r = requests.get(f"https://api.github.com/repos/{full_name}", headers=GITHUB_HEADERS, timeout=5)
+        r, meta = logged_request(cur, conn, "GET", f"https://api.github.com/repos/{full_name}", headers=GITHUB_HEADERS_REPO, timeout=5)
         repo_limiter.record_call()
+        if r is None: return False
         if r.status_code == 200:
             d = r.json()
             cur.execute("""
@@ -190,6 +198,55 @@ def _redact_headers(headers):
         else:
             redacted[name] = value
     return redacted
+
+
+def logged_request(cur, conn, method, url, **kwargs):
+    """Perform an HTTP request and log metadata directly to request_logs."""
+    sent_at = datetime.now(timezone.utc)
+    try:
+        r = requests.request(method, url, **kwargs)
+        received_at = datetime.now(timezone.utc)
+        meta = {
+            "request_success": r.ok,
+            "sent_at":         sent_at.isoformat(),
+            "received_at":     received_at.isoformat(),
+            "elapsed_s":       r.elapsed.total_seconds(),
+            "method":          r.request.method,
+            "url":             r.request.url,
+            "request_headers": _redact_headers(dict(r.request.headers)),
+            "status_code":     r.status_code,
+            "reason":          r.reason,
+            "response_bytes":  len(r.content),
+            "response_headers": _redact_headers(dict(r.headers)),
+            "redirects":       len(r.history),
+            "final_url":       r.url,
+            "http_version":    r.raw.version,
+            "encoding":        r.encoding,
+        }
+        insert_request_meta(cur, meta)
+        conn.commit()
+        return r, meta
+    except requests.RequestException as exc:
+        error_meta = {
+            "request_success": False,
+            "sent_at":         sent_at.isoformat(),
+            "received_at":     datetime.now(timezone.utc).isoformat(),
+            "error":           str(exc),
+            "method":          method,
+            "url":             url,
+            "status_code":     None,
+            "reason":          None,
+            "response_bytes":  None,
+            "response_headers": None,
+            "redirects":       None,
+            "final_url":       None,
+            "http_version":    None,
+            "encoding":        None,
+        }
+        insert_request_meta(cur, error_meta)
+        conn.commit()
+        log.warning("GitHub API request failed: %s", exc)
+        return None, error_meta
 
 
 def insert_request_meta(cur, meta: dict) -> None:
@@ -286,8 +343,8 @@ def main():
                         continue
 
                     # --- STUFE 1: Stammdaten-Anreicherung (Enrichment) ---
-                    enrich_user(cur, actor)
-                    enrich_repo(cur, repo_name)
+                    enrich_user(cur, conn, actor)
+                    enrich_repo(cur, conn, repo_name)
 
                     # --- STUFE 2: Relationen-Learning (Membership) ---
                     cur.execute("SELECT owner_login, owner_type FROM repos WHERE repo_id = %s", (repo_id,))
@@ -297,7 +354,7 @@ def main():
                         owner_login, owner_type = res
 
                         if owner_type == 'Organization':
-                            enrich_user(cur, owner_login)
+                            enrich_user(cur, conn, owner_login)
                             cur.execute("SELECT username FROM users WHERE username = %s", (actor,))
                             if cur.fetchone():
                                 cur.execute("""
