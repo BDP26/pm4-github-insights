@@ -45,7 +45,7 @@ GitHub API
 │                    90-day retention │
 │                                     │
 │  event_stats_5m  ← continuous agg  │
-│  country_stats_5m← continuous agg  │
+│  country_ids_5m  ← continuous agg  │
 │  actor_stats_1h  ← continuous agg  │
 └──────────┬─────────────┬────────────┘
            │             │
