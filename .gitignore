@@ -210,3 +210,5 @@ __marimo__/
 .claude
 .DS_Store
 .env copy.example
+docs/superpowers
+GITHUB PM4.session.sql

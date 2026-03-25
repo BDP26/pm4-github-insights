@@ -111,10 +111,10 @@ def extract_detail(event: dict) -> str:
 # ── Enrichment ──────────────────────────────────────────────────
 
 def enrich_user(cur, conn, username):
-    if username.endswith("[bot]"):
-        return False  # skip bots
+    # Fast path: already known as user or bot
     cur.execute("SELECT username FROM users WHERE username = %s", (username,))
     if cur.fetchone(): return True
+    # Fast path: already known as org
     cur.execute("SELECT login FROM organizations WHERE login = %s", (username,))
     if cur.fetchone(): return True
 
@@ -124,25 +124,51 @@ def enrich_user(cur, conn, username):
         r, meta = logged_request(cur, conn, "GET", f"https://api.github.com/users/{username}", headers=GITHUB_HEADERS_USER, timeout=5)
         user_limiter.record_call()
         if r is None: return False
+
+        if r.status_code == 404:
+            # Username unresolvable — insert stub so we don't retry on every event.
+            # `username` is used (not d['login']) because there is no response body on 404.
+            # is_bot defaults to FALSE (column is NOT NULL DEFAULT FALSE).
+            # Stubs pass the org_members guard (AND is_bot = FALSE) but lack location/repo
+            # data, so they won't distort geo or country statistics.
+            log.info("Stored 404 stub for unresolvable actor: %s", username)
+            cur.execute("""
+                INSERT INTO users (username, fetched_at)
+                VALUES (%s, NOW()) ON CONFLICT DO NOTHING
+            """, (username,))
+            return False
+
         if r.status_code == 200:
             d = r.json()
-            if d.get("type") == "User":
+            actor_type = d.get("type")  # "User", "Organization", or "Bot"
+
+            if actor_type == "User":
                 geo = geocode(d.get("location"))
                 cur.execute("""
-                            INSERT INTO users (username, fetched_at, company, location, country, country_code, lat, lng,
-                                               public_repos, followers)
-                            VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING
-                            """, (d['login'], d.get('company'), d.get('location'), geo.get('country'),
-                                  geo.get('country_code'),
-                                  geo.get('lat'), geo.get('lng'), d.get('public_repos'), d.get('followers')))
-            else:
+                    INSERT INTO users (username, fetched_at, company, location, country, country_code,
+                                       lat, lng, public_repos, followers, is_bot)
+                    VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, FALSE) ON CONFLICT DO NOTHING
+                """, (d['login'], d.get('company'), d.get('location'), geo.get('country'),
+                      geo.get('country_code'), geo.get('lat'), geo.get('lng'),
+                      d.get('public_repos'), d.get('followers')))
+
+            elif actor_type == "Bot":
+                # Bots: stored in users with is_bot=TRUE, no geo/profile data
+                log.info("Stored bot actor: %s", d['login'])
                 cur.execute("""
-                            INSERT INTO organizations (login, fetched_at, name, description, location, public_repos,
-                                                       created_at)
-                            VALUES (%s, NOW(), %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING
-                            """,
-                            (d['login'], d.get('name'), d.get('description'), d.get('location'), d.get('public_repos'),
-                             d.get('created_at')))
+                    INSERT INTO users (username, fetched_at, is_bot)
+                    VALUES (%s, NOW(), %s) ON CONFLICT DO NOTHING
+                """, (d['login'], True))
+
+            else:
+                # Organization
+                cur.execute("""
+                    INSERT INTO organizations (login, fetched_at, name, description, location,
+                                               public_repos, created_at)
+                    VALUES (%s, NOW(), %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING
+                """,
+                            (d['login'], d.get('name'), d.get('description'), d.get('location'),
+                             d.get('public_repos'), d.get('created_at')))
             return True
     except Exception as e:
         log.error(f"User API Error: {e}")
@@ -355,7 +381,7 @@ def main():
 
                         if owner_type == 'Organization':
                             enrich_user(cur, conn, owner_login)
-                            cur.execute("SELECT username FROM users WHERE username = %s", (actor,))
+                            cur.execute("SELECT username FROM users WHERE username = %s AND is_bot = FALSE", (actor,))
                             if cur.fetchone():
                                 cur.execute("""
                                     INSERT INTO organization_members (org_login, user_username, role)
