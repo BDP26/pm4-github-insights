@@ -23,7 +23,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "fffzkyf8440lca"
+        "uid": "github_events_db"
       },
       "fieldConfig": {
         "defaults": {
@@ -105,7 +105,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "fffzkyf8440lca"
+        "uid": "github_events_db"
       },
       "fieldConfig": {
         "defaults": {
@@ -187,7 +187,92 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "fffzkyf8440lca"
+        "uid": "github_events_db"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "fieldMinMax": false,
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 8,
+        "y": 0
+      },
+      "id": 5,
+      "options": {
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "sort": "asc",
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "dataset": "github_events",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT \n    CASE \n        WHEN lat IS NOT NULL THEN 'Geocoded' \n        ELSE 'No Geodata' \n    END AS category,\n    COUNT(*) AS count\nFROM users\nWHERE is_bot = FALSE\nGROUP BY 1;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "",
+      "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "github_events_db"
       },
       "fieldConfig": {
         "defaults": {
@@ -214,8 +299,8 @@
       "gridPos": {
         "h": 3,
         "w": 4,
-        "x": 8,
-        "y": 0
+        "x": 0,
+        "y": 3
       },
       "id": 4,
       "options": {
@@ -269,7 +354,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "fffzkyf8440lca"
+        "uid": "github_events_db"
       },
       "fieldConfig": {
         "defaults": {
@@ -304,7 +389,7 @@
         "h": 18,
         "w": 24,
         "x": 0,
-        "y": 3
+        "y": 6
       },
       "id": 1,
       "options": {
@@ -382,7 +467,7 @@
           }
         }
       ],
-      "title": "New panel",
+      "title": "Location of geocoded users",
       "type": "geomap"
     }
   ],

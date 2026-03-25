@@ -145,11 +145,12 @@ services:
       ports:
         - "3001:3000"
       environment:
-        - GF_SECURITY_ADMIN_PASSWORD=admin
+        - GF_SECURITY_ADMIN_PASSWORD=admin12345
       volumes:
         - grafana-data:/var/lib/grafana
-        # HIER DIE MAGIE: Lokale Dateien in den Container mounten
         - ./grafana/provisioning:/etc/grafana/provisioning
+      # HIER WIRD AUF DEN HEALTHCHECK DER DB GEWARTET
       depends_on:
         timescaledb:
           condition: service_healthy
+      restart: unless-stopped
