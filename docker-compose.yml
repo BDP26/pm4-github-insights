@@ -139,7 +139,7 @@ services:
 
   # ── Grafana (Visualisation) ────────────────────────────────────
   grafana:
-      image: grafana/grafana-oss:latest
+      image: grafana/grafana-oss:latest-ubuntu
       container_name: grafana
       networks: [github-stream]
       ports:
