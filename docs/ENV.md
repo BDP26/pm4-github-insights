@@ -10,7 +10,7 @@ Docker Compose reads this file automatically.
 <!-- AUTO-GENERATED — source: docker-compose.yml producer.environment -->
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GITHUB_TOKEN` | No | _(empty)_ | GitHub personal access token. Raises rate limit from 60 to 5 000 req/h. Strongly recommended. |
+| `GITHUB_TOKEN_EVENTS` | No | _(empty)_ | GitHub PAT used to poll the public events API. Raises rate limit from 60 to 5 000 req/h. Strongly recommended. |
 | `KAFKA_BOOTSTRAP_SERVERS` | Yes | `kafka:9092` | Kafka broker address. Use `kafka:9092` inside Docker; `localhost:9094` from the host. |
 | `POLL_INTERVAL_SECONDS` | No | `10` | Seconds between GitHub public events API polls. |
 | `MAX_PAGES` | No | `3` | Number of pages to fetch per poll. Each page contains ~30 events. |
@@ -23,7 +23,8 @@ Docker Compose reads this file automatically.
 <!-- AUTO-GENERATED — source: docker-compose.yml consumer.environment -->
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GITHUB_TOKEN` | No | _(empty)_ | GitHub PAT — used to fetch user profile data without hitting the 60 req/h unauthenticated limit. |
+| `GITHUB_TOKEN_USER` | No | _(empty)_ | GitHub PAT used to fetch user profile data (`/users/:login`). Raises rate limit from 60 to 5 000 req/h. |
+| `GITHUB_TOKEN_REPO` | No | _(empty)_ | GitHub PAT used to fetch repository metadata (`/repos/:owner/:repo`). Separate token allows independent rate-limit budgets. |
 | `KAFKA_BOOTSTRAP_SERVERS` | Yes | `kafka:9092` | Kafka broker address. |
 | `DB_HOST` | Yes | `timescaledb` | TimescaleDB hostname. |
 | `DB_PORT` | No | `5432` | TimescaleDB port. |
@@ -54,10 +55,11 @@ The API reads `DB_*` variables at runtime.
 
 The frontend uses two URL patterns to avoid browser/server network mismatches.
 
-<!-- AUTO-GENERATED — source: frontend/Dockerfile ARG declarations -->
+<!-- AUTO-GENERATED — source: frontend/Dockerfile ARG declarations, frontend/src/lib/api.ts -->
 | Variable | Required | When resolved | Default | Description |
 |---|---|---|---|---|
 | `NEXT_PUBLIC_API_URL` | Yes | **Build time** (baked into client bundle) | `http://localhost:8000` | Base URL used by the browser SSE hook and any client-side fetches. Must be reachable from the user's browser. |
+| `API_URL` | No | **Runtime** (server-side only) | `http://localhost:8000` | Base URL used by Next.js Server Components and Route Handlers to reach the API over the internal network. Never exposed to the browser. Set to the internal Docker hostname (e.g. `http://api:8000`) when running in Docker. |
 <!-- /AUTO-GENERATED -->
 
 > **Why this variable?**
