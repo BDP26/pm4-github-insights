@@ -13,4 +13,3 @@ datasources:
       postgresVersion: 16
       timescaledb: true
     editable: true
-    update: true
