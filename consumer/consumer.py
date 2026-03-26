@@ -136,6 +136,7 @@ def enrich_user(cur, conn, username):
                 INSERT INTO users (username, fetched_at)
                 VALUES (%s, NOW()) ON CONFLICT DO NOTHING
             """, (username,))
+            conn.commit()
             return False
 
         if r.status_code == 200:
