@@ -40,11 +40,13 @@ src/
 │   ├── KpiCard.tsx           # Single KPI metric card (Tremor Card)
 │   ├── CommitsChart.tsx      # Commits over time — Tremor AreaChart
 │   ├── RepoActivityChart.tsx # Top repos by events — Tremor BarChart
-│   └── RecentEventsTable.tsx # Recent events — Tremor Table
+│   ├── RecentEventsTable.tsx # Recent events — Tremor Table
+│   └── LiveEventsTable.tsx   # Real-time SSE-driven event table
 ├── hooks/
 │   └── useSSE.ts             # Reusable SSE hook (see below)
 ├── lib/
-│   └── mockData.ts           # Static mock data (replace with live API calls)
+│   ├── api.ts                # Server-side fetch wrappers (uses API_URL env var)
+│   └── mockData.ts           # Static mock data (fallback / test fixtures)
 └── types/
     └── dashboard.ts          # Shared TypeScript interfaces
 ```
@@ -106,11 +108,26 @@ The connection is cleanly closed when the component unmounts.
 
 ## Wiring in real data
 
-1. Start the FastAPI backend (see root `docker-compose.yml`).
-2. The SSE endpoint will be available at `http://localhost:8000/stream/events`.
-3. Replace the imports from `@/lib/mockData` in `src/app/page.tsx` with
-   `useSSE` calls or `fetch` calls against the FastAPI REST endpoints.
-4. Remove or keep `src/lib/mockData.ts` as a fallback / test fixture.
+`src/lib/api.ts` already contains server-side fetch wrappers for all REST endpoints:
+
+```ts
+fetchKpis()              // GET /api/kpis
+fetchCommitsOverTime()   // GET /api/commits-over-time
+fetchTopRepos()          // GET /api/top-repos
+fetchRecentEvents()      // GET /api/recent-events
+```
+
+These use the `API_URL` environment variable (server-side only, not baked into the bundle).
+
+For real-time data, use the `useSSE` hook (client components only):
+
+```tsx
+const { data } = useSSE<YourType>(
+  `${process.env.NEXT_PUBLIC_API_URL}/stream/events`
+);
+```
+
+`src/lib/mockData.ts` remains as a test fixture / fallback.
 
 ---
 
