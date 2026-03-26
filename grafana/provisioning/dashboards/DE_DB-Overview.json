@@ -549,7 +549,7 @@
           "dataset": "github_events",
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "fffzkyf8440lca"
+            "uid": "github_events_db"
           },
           "editorMode": "code",
           "format": "table",
