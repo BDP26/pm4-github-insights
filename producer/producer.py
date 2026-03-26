@@ -6,7 +6,7 @@ to the Kafka topic  github.events.raw
 
 Environment variables:
   KAFKA_BOOTSTRAP_SERVERS  (default: localhost:9092)
-  GITHUB_TOKEN             (optional, raises rate limit to 5000 req/h)
+  GITHUB_TOKEN_EVENTS      (optional, raises rate limit to 5000 req/h)
   POLL_INTERVAL_SECONDS    (default: 10)
   MAX_PAGES                (default: 3)
 """
@@ -34,7 +34,7 @@ TOPIC_RAW            = "github.events.raw"
 TOPIC_STATUS         = "github.events.status"
 POLL_INTERVAL        = int(os.getenv("POLL_INTERVAL_SECONDS", "10"))
 MAX_PAGES            = int(os.getenv("MAX_PAGES", "3"))
-TOKEN                = os.getenv("GITHUB_TOKEN", "")
+TOKEN                = os.getenv("GITHUB_TOKEN_EVENTS", "")
 
 GITHUB_HEADERS = {
     "Accept":     "application/vnd.github+json",
@@ -256,7 +256,7 @@ def main():
     log.info("  Bootstrap servers : %s", BOOTSTRAP_SERVERS)
     log.info("  Topic             : %s and %s", TOPIC_RAW, TOPIC_STATUS)
     log.info("  Poll interval     : %ds", POLL_INTERVAL)
-    log.info("  GitHub auth       : %s", "yes (token)" if TOKEN else "no (60 req/h limit)")
+    log.info("  GitHub auth       : %s", "yes (GITHUB_TOKEN_EVENTS)" if TOKEN else "no (60 req/h limit)")
 
     producer = create_producer()
 

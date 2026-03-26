@@ -76,6 +76,7 @@ erDiagram
 
     users {
         TEXT username PK "login"
+        BOOLEAN is_bot "FALSE for humans, TRUE for bots"
         TEXT company
         TEXT location
         TEXT country
@@ -196,6 +197,78 @@ docker compose down -v       # stop containers AND delete all data
 
 ---
 
+## Docker commands — when to use what
+
+### After changing Python code (consumer or producer)
+
+Rebuild only the affected container — infrastructure stays up, data is preserved.
+
+```bash
+# Consumer changed (consumer/consumer.py or consumer/Dockerfile)
+docker compose up -d --build consumer
+
+# Producer changed (producer/producer.py or producer/Dockerfile)
+docker compose up -d --build producer
+
+# Both changed
+docker compose up -d --build consumer producer
+```
+
+### After changing Grafana dashboards / provisioning
+
+Grafana config is mounted as a volume — just restart the container, no rebuild needed.
+
+```bash
+docker compose restart grafana
+```
+
+### After changing db/init.sql (fresh DB only)
+
+`init.sql` only runs when the DB volume is created for the first time. To apply changes to a **running** DB, write a migration script instead (see below). To apply to a **fresh** DB:
+
+```bash
+docker compose down -v          # deletes all data
+docker compose up --build       # re-creates DB with new schema
+```
+
+### Applying a DB migration to a running stack
+
+Migration scripts live in `db/migrations/`. Apply them directly against the running TimescaleDB container without touching other services:
+
+```bash
+docker exec -i timescaledb psql -U github -d github_events \
+  < db/migrations/001_add_is_bot_to_users.sql
+```
+
+Verify the migration ran cleanly — look for `ALTER TABLE`, `CREATE ...` lines and no `ERROR:` lines.
+
+### Full teardown and rebuild (e.g. after infra changes)
+
+```bash
+docker compose down             # keep volumes (preserves DB data)
+docker compose up --build       # rebuild all images
+
+# OR — start completely fresh (deletes all data)
+docker compose down -v
+docker compose up --build
+```
+
+### Viewing logs
+
+```bash
+docker logs -f github-consumer          # follow consumer logs
+docker logs -f github-producer          # follow producer logs
+docker logs github-consumer --tail 50   # last 50 lines only
+```
+
+### Opening a psql session
+
+```bash
+docker exec -it timescaledb psql -U github -d github_events
+```
+
+---
+
 ## API endpoints
 
 | Method | Path | Description |
@@ -217,10 +290,10 @@ docker exec -it timescaledb psql -U github -d github_events
 ```
 
 ```sql
--- Most active repos in the last 24 hours
+-- Most active repos in the last 24 hours (human actors only)
 SELECT * FROM v_top_repos_24h LIMIT 10;
 
--- Geographic distribution of events
+-- Geographic distribution of events (bots excluded)
 SELECT * FROM v_geo_events LIMIT 20;
 
 -- Most active actor today
@@ -237,6 +310,19 @@ FROM events
 WHERE event_type = 'PushEvent'
 ORDER BY time DESC
 LIMIT 20;
+
+-- Bot activity vs human activity breakdown
+SELECT
+    u.is_bot,
+    count(e.event_id) AS total_events,
+    count(DISTINCT e.actor_username) AS unique_actors
+FROM events e
+JOIN users u ON e.actor_username = u.username
+WHERE e.time > now() - INTERVAL '24 hours'
+GROUP BY u.is_bot;
+
+-- List all known bots
+SELECT username, fetched_at FROM users WHERE is_bot = TRUE ORDER BY fetched_at DESC;
 ```
 
 ---
