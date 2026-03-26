@@ -250,7 +250,6 @@ def logged_request(cur, conn, method, url, **kwargs):
             "encoding":        r.encoding,
         }
         insert_request_meta(cur, meta)
-        conn.commit()
         return r, meta
     except requests.RequestException as exc:
         error_meta = {
@@ -270,7 +269,6 @@ def logged_request(cur, conn, method, url, **kwargs):
             "encoding":        None,
         }
         insert_request_meta(cur, error_meta)
-        conn.commit()
         log.warning("GitHub API request failed: %s", exc)
         return None, error_meta
 
@@ -307,6 +305,15 @@ def insert_request_meta(cur, meta: dict) -> None:
     ))
 
 # ── Main ────────────────────────────────────────────────────────
+
+def _is_non_bot_user(cur, username: str) -> bool:
+    """Return True iff username exists in users and is not a bot."""
+    cur.execute(
+        "SELECT username FROM users WHERE username = %s AND is_bot = FALSE",
+        (username,),
+    )
+    return cur.fetchone() is not None
+
 
 def main():
     log.info("Starting GitHub Events Consumer (Star Schema Mode)")
@@ -381,8 +388,7 @@ def main():
 
                         if owner_type == 'Organization':
                             enrich_user(cur, conn, owner_login)
-                            cur.execute("SELECT username FROM users WHERE username = %s AND is_bot = FALSE", (actor,))
-                            if cur.fetchone():
+                            if _is_non_bot_user(cur, actor):
                                 cur.execute("""
                                     INSERT INTO organization_members (org_login, user_username, role)
                                     VALUES (%s, %s, 'contributor') ON CONFLICT DO NOTHING

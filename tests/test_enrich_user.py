@@ -312,17 +312,21 @@ def test_404_inserts_stub_row_to_prevent_repeated_api_calls():
     assert "ghost" in params, f"Stub row must use the username passed to enrich_user, got: {params}"
 
 
-def test_organization_members_guard_excludes_bots_in_source():
-    """Regression guard: verify the org-members SELECT excludes bots.
+def test_is_non_bot_user_returns_false_for_bot():
+    """_is_non_bot_user returns False when no non-bot row is found (actor is a bot)."""
+    from consumer import _is_non_bot_user
+    cur = MagicMock()
+    cur.fetchone.return_value = None
+    result = _is_non_bot_user(cur, "bot[bot]")
+    assert result is False
+    sql = cur.execute.call_args[0][0]
+    assert "is_bot = FALSE" in sql
 
-    The guard in main() that prevents bots from appearing in
-    organization_members must include AND is_bot = FALSE.
-    This test catches accidental removal of that condition.
-    """
-    source_path = os.path.join(os.path.dirname(__file__), '..', 'consumer', 'consumer.py')
-    with open(source_path) as f:
-        source = f.read()
-    assert "AND is_bot = FALSE" in source, (
-        "The organization_members guard in main() must include "
-        "AND is_bot = FALSE in the SELECT before the INSERT."
-    )
+
+def test_is_non_bot_user_returns_true_for_human():
+    """_is_non_bot_user returns True when a non-bot row exists."""
+    from consumer import _is_non_bot_user
+    cur = MagicMock()
+    cur.fetchone.return_value = ("alice",)
+    result = _is_non_bot_user(cur, "alice")
+    assert result is True
