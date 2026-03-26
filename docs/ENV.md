@@ -58,12 +58,10 @@ The frontend uses two URL patterns to avoid browser/server network mismatches.
 | Variable | Required | When resolved | Default | Description |
 |---|---|---|---|---|
 | `NEXT_PUBLIC_API_URL` | Yes | **Build time** (baked into client bundle) | `http://localhost:8000` | Base URL used by the browser SSE hook and any client-side fetches. Must be reachable from the user's browser. |
-| `API_URL` | Yes | **Runtime** (server components only) | `http://api:8000` | Base URL used by Next.js server-side fetch calls. Must be reachable from the Next.js container, not from the browser. |
 <!-- /AUTO-GENERATED -->
 
-> **Why two variables?**
+> **Why this variable?**
 > `NEXT_PUBLIC_API_URL` is embedded into the JavaScript bundle at build time. It must resolve from the **user's browser** (e.g. `http://localhost:8000`).
-> `API_URL` is read at request time by server components inside the container where Docker DNS resolves `api` to the API container.
 
 ---
 
