@@ -28,7 +28,7 @@ The FastAPI (`api/`) and Next.js (`frontend/`) services have their own Dockerfil
 ```bash
 # API
 docker build -t github-api ./api
-docker run -p 8000:8000 --env-file .env github-api
+docker run --name github-api -p 8000:8000 --env-file .env github-api
 
 # Frontend (set NEXT_PUBLIC_API_URL at build time)
 docker build --build-arg NEXT_PUBLIC_API_URL=http://localhost:8000 -t github-frontend ./frontend
