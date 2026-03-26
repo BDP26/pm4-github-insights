@@ -209,6 +209,7 @@ __marimo__/
 .env
 .claude
 .DS_Store
-
-# LaTeX build artefacts
+.env copy.example
+docs/superpowers
+GITHUB PM4.session.sql
 report/

@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
     lng             DOUBLE PRECISION,
     public_repos    INTEGER,
     followers       INTEGER,
-    last_active     TIMESTAMPTZ
+    last_active     TIMESTAMPTZ,
+    is_bot          BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- ── 2. Dimension: Organizations ──────────────────────────────────
@@ -119,6 +120,7 @@ SELECT
     count(*) AS event_count
 FROM events e
 JOIN users u ON e.actor_username = u.username
+WHERE u.is_bot = FALSE
 GROUP BY bucket, u.country_code;
 
 -- ════════════════════════════════════════════════════════════════
@@ -131,9 +133,10 @@ SELECT
     r.full_name,
     r.language,
     count(e.event_id) AS events,
-    count(DISTINCT e.actor_username) AS unique_users
+    count(DISTINCT CASE WHEN u.is_bot IS DISTINCT FROM TRUE THEN e.actor_username END) AS unique_users
 FROM events e
 JOIN repos r ON e.repo_id = r.repo_id
+LEFT JOIN users u ON e.actor_username = u.username
 WHERE e.time > now() - INTERVAL '24 hours'
 GROUP BY r.full_name, r.language
 ORDER BY events DESC;
@@ -149,7 +152,8 @@ SELECT
 FROM events e
 JOIN users u ON e.actor_username = u.username
 WHERE e.time > now() - INTERVAL '1 hour'
-  AND u.lat IS NOT NULL;
+  AND u.lat IS NOT NULL
+  AND u.is_bot = FALSE;
 
 -- Grafana User
 DO $$
