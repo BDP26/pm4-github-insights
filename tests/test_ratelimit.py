@@ -44,3 +44,35 @@ def test_extract_ratelimit_defaults_resource_to_core():
     headers = {"X-RateLimit-Remaining": "50"}
     result = extract_ratelimit(headers, "consumer")
     assert result["resource"] == "core"
+
+
+def test_publish_ratelimit_calls_produce_with_ratelimit_headers():
+    import consumer
+    from unittest.mock import MagicMock
+    mock_producer = MagicMock()
+    original = consumer._kafka_producer
+    try:
+        consumer._kafka_producer = mock_producer
+        headers = {
+            "X-RateLimit-Remaining": "4000",
+            "X-RateLimit-Limit": "5000",
+            "X-RateLimit-Resource": "core",
+        }
+        consumer._publish_ratelimit(headers)
+        mock_producer.produce.assert_called_once()
+        call_kwargs = mock_producer.produce.call_args
+        assert call_kwargs[1]["topic"] == "github.ratelimit" or \
+               (call_kwargs[0] and call_kwargs[0][0] == "github.ratelimit")
+    finally:
+        consumer._kafka_producer = original
+
+
+def test_publish_ratelimit_does_nothing_when_no_producer():
+    import consumer
+    original = consumer._kafka_producer
+    try:
+        consumer._kafka_producer = None
+        # Should not raise
+        consumer._publish_ratelimit({"X-RateLimit-Remaining": "100"})
+    finally:
+        consumer._kafka_producer = original

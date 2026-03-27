@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import psycopg2
 import psycopg2.extras
 import requests
-from confluent_kafka import Consumer, KafkaError, KafkaException
+from confluent_kafka import Consumer, KafkaError, KafkaException, Producer
 
 # ── Logging ──────────────────────────────────────────────────────
 logging.basicConfig(
@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 # ── Config ───────────────────────────────────────────────────────
 BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 TOPIC_RAW = "github.events.raw"
+TOPIC_RATELIMIT = "github.ratelimit"
 GROUP_ID = "github-events-enricher"
 
 DB_DSN = (
@@ -39,6 +40,8 @@ if GITHUB_TOKEN_USER:
 GITHUB_HEADERS_REPO = {"Accept": "application/vnd.github+json", "User-Agent": "ZHAW-Explorer/2.0"}
 if GITHUB_TOKEN_REPO:
     GITHUB_HEADERS_REPO["Authorization"] = f"Bearer {GITHUB_TOKEN_REPO}"
+
+_kafka_producer: Producer | None = None
 
 # ── Helpers ─────────────────────────────────────────────────────
 
@@ -320,6 +323,24 @@ def extract_ratelimit(headers: dict, source: str) -> dict | None:
     }
 
 
+def _publish_ratelimit(headers: dict) -> None:
+    """Publish a rate limit snapshot to github.ratelimit if producer is available."""
+    if _kafka_producer is None:
+        return
+    rl = extract_ratelimit(dict(headers), "consumer")
+    if not rl:
+        return
+    try:
+        _kafka_producer.produce(
+            topic=TOPIC_RATELIMIT,
+            key=f"ratelimit-{int(time.time())}",
+            value=json.dumps(rl),
+        )
+        _kafka_producer.poll(0)
+    except Exception as e:
+        log.warning("Failed to publish rate limit snapshot: %s", e)
+
+
 def logged_request(cur, conn, method, url, **kwargs):
     """Perform an HTTP request and log metadata directly to request_logs."""
     sent_at = datetime.now(timezone.utc)
@@ -343,6 +364,7 @@ def logged_request(cur, conn, method, url, **kwargs):
             "http_version":    r.raw.version,
             "encoding":        r.encoding,
         }
+        _publish_ratelimit(r.headers)
         return r, meta
     except requests.RequestException as exc:
         error_meta = {
@@ -452,6 +474,13 @@ def _is_non_bot_user(cur, username: str) -> bool:
 
 
 def main():
+    global _kafka_producer
+    _kafka_producer = Producer({
+        "bootstrap.servers": BOOTSTRAP_SERVERS,
+        "acks": "1",
+        "linger.ms": 100,
+    })
+    log.info("Kafka producer initialized for rate limit publishing")
     log.info("Starting GitHub Events Consumer (Star Schema Mode)")
 
     # 1. Kafka Consumer Initialisierung
