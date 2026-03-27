@@ -32,6 +32,7 @@ log = logging.getLogger(__name__)
 BOOTSTRAP_SERVERS    = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 TOPIC_RAW            = "github.events.raw"
 TOPIC_STATUS         = "github.events.status"
+TOPIC_RATELIMIT      = "github.ratelimit"
 POLL_INTERVAL        = int(os.getenv("POLL_INTERVAL_SECONDS", "10"))
 MAX_PAGES            = int(os.getenv("MAX_PAGES", "3"))
 TOKEN                = os.getenv("GITHUB_TOKEN_EVENTS", "")
@@ -89,6 +90,29 @@ def _redact_headers(headers) -> dict:
         else:
             redacted[key] = value
     return redacted
+
+
+def extract_ratelimit(headers: dict, source: str) -> dict | None:
+    """Extract GitHub rate limit fields from response headers.
+
+    Returns None if X-RateLimit-Remaining is absent (non-GitHub response).
+    """
+    remaining = headers.get("X-RateLimit-Remaining")
+    if remaining is None:
+        return None
+    reset_ts = headers.get("X-RateLimit-Reset")
+    return {
+        "source": source,
+        "resource": headers.get("X-RateLimit-Resource", "core"),
+        "limit": int(headers.get("X-RateLimit-Limit", 0)),
+        "used": int(headers.get("X-RateLimit-Used", 0)),
+        "remaining": int(remaining),
+        "reset_at": (
+            datetime.fromtimestamp(int(reset_ts), tz=timezone.utc).isoformat()
+            if reset_ts else None
+        ),
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def logged_request(METHOD: str, URL: str, **kwargs) -> tuple:
@@ -177,6 +201,10 @@ def fetch_events(producer: Producer) -> tuple[list[dict], list[dict]]:
             )
             new_metas.append(meta)
             publish_status(producer=producer, meta=meta)
+            if resp is not None:
+                rl = extract_ratelimit(dict(resp.headers), "producer")
+                if rl:
+                    publish_ratelimit(producer, rl)
             producer.poll(0)
 
             # LOGGING FOR DEBUG PURPOSES
@@ -247,6 +275,14 @@ def publish_status(producer: Producer, meta: dict) -> None:
     )
 
 
+def publish_ratelimit(producer: Producer, data: dict) -> None:
+    """Publish a rate limit snapshot to github.ratelimit."""
+    producer.produce(
+        topic=TOPIC_RATELIMIT,
+        key=f"ratelimit-{int(time.time())}",
+        value=json.dumps(data),
+        callback=delivery_report,
+    )
 
 
 def main():
@@ -254,7 +290,7 @@ def main():
 
     log.info("Starting GitHub Events Producer")
     log.info("  Bootstrap servers : %s", BOOTSTRAP_SERVERS)
-    log.info("  Topic             : %s and %s", TOPIC_RAW, TOPIC_STATUS)
+    log.info("  Topics            : %s, %s, %s", TOPIC_RAW, TOPIC_STATUS, TOPIC_RATELIMIT)
     log.info("  Poll interval     : %ds", POLL_INTERVAL)
     log.info("  GitHub auth       : %s", "yes (GITHUB_TOKEN_EVENTS)" if TOKEN else "no (60 req/h limit)")
 
