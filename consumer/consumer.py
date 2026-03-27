@@ -78,6 +78,18 @@ def _delete_user_stub(cur, conn, username: str) -> None:
         log.warning("Could not clean up stub for %s: %s", username, cleanup_err)
 
 
+def _delete_repo_stub(cur, conn, repo_id: int) -> None:
+    """Delete an unclaimed repo stub so other consumers can retry enrichment."""
+    try:
+        cur.execute(
+            "DELETE FROM repos WHERE repo_id = %s AND fetched_at IS NULL",
+            (repo_id,),
+        )
+        conn.commit()
+    except Exception as cleanup_err:
+        log.warning("Could not clean up repo stub for %s: %s", repo_id, cleanup_err)
+
+
 def enrich_user(cur, conn, username):
     """Enrich a GitHub actor using the claim-before-fetch pattern.
 
@@ -186,28 +198,78 @@ def enrich_user(cur, conn, username):
     return False
 
 
-def enrich_repo(cur, conn, full_name):
-    cur.execute("SELECT repo_id FROM repos WHERE full_name = %s", (full_name,))
-    if cur.fetchone(): return True
+def enrich_repo(cur, conn, repo_id: int, full_name: str):
+    """Enrich a repository using the claim-before-fetch pattern.
+
+    Signature change: now takes repo_id (int) as well as full_name.
+    The claim stub uses repo_id as the conflict key (PRIMARY KEY).
+    """
+    # Fast path
+    cur.execute(
+        "SELECT repo_id FROM repos WHERE repo_id = %s AND fetched_at IS NOT NULL",
+        (repo_id,),
+    )
+    if cur.fetchone():
+        return True
+
+    # Claim stub (repo_id is the PK; name/full_name/owner_login satisfy NOT NULL)
+    cur.execute(
+        """INSERT INTO repos (repo_id, name, full_name, owner_login, owner_type)
+           VALUES (%s, '', %s, '', '')
+           ON CONFLICT DO NOTHING
+           RETURNING repo_id""",
+        (repo_id, full_name),
+    )
+    if not cur.fetchone():
+        return False
+    conn.commit()
 
     try:
-        r, meta = logged_request(cur, conn, "GET", f"https://api.github.com/repos/{full_name}", headers=GITHUB_HEADERS_REPO, timeout=5)
-        if r is None: return False
+        r, _ = logged_request(
+            cur, conn, "GET",
+            f"https://api.github.com/repos/{full_name}",
+            headers=GITHUB_HEADERS_REPO,
+            timeout=5,
+        )
+        if r is None:
+            # Network error — delete stub so another consumer can retry
+            _delete_repo_stub(cur, conn, repo_id)
+            return False
         if r.status_code == 200:
             d = r.json()
             cur.execute("""
-                        INSERT INTO repos (repo_id, fetched_at, name, full_name, owner_login, owner_type, description,
-                                           language, license_spdx, topics, stargazers_count, forks_count, size,
-                                           created_at, pushed_at)
-                        VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING
-                        """, (d['id'], d['name'], d['full_name'], d['owner']['login'], d['owner']['type'],
-                              d.get('description'),
-                              d.get('language'), (d.get('license') or {}).get('spdx_id'), d.get('topics', []),
-                              d.get('stargazers_count'), d.get('forks_count'), d.get('size'), d.get('created_at'),
-                              d.get('pushed_at')))
+                UPDATE repos
+                SET fetched_at        = NOW(),
+                    name              = %s,
+                    full_name         = %s,
+                    owner_login       = %s,
+                    owner_type        = %s,
+                    description       = %s,
+                    language          = %s,
+                    license_spdx      = %s,
+                    topics            = %s,
+                    stargazers_count  = %s,
+                    forks_count       = %s,
+                    size              = %s,
+                    created_at        = %s,
+                    pushed_at         = %s
+                WHERE repo_id = %s
+            """, (
+                d["name"], d["full_name"],
+                d["owner"]["login"], d["owner"]["type"],
+                d.get("description"),
+                d.get("language"),
+                (d.get("license") or {}).get("spdx_id"),
+                d.get("topics", []),
+                d.get("stargazers_count"), d.get("forks_count"),
+                d.get("size"), d.get("created_at"), d.get("pushed_at"),
+                d["id"],
+            ))
+            conn.commit()
             return True
     except Exception as e:
-        log.error(f"Repo API Error: {e}")
+        log.error("Repo API Error for %s: %s", full_name, e)
+        _delete_repo_stub(cur, conn, repo_id)
     return False
 
 def _redact_headers(headers):
@@ -482,7 +544,7 @@ def main():
 
                     # --- STUFE 1: Stammdaten-Anreicherung (Enrichment) ---
                     enrich_user(cur, conn, actor)
-                    enrich_repo(cur, conn, repo_name)
+                    enrich_repo(cur, conn, repo_id, repo_name)
 
                     # --- STUFE 2: Relationen-Learning (Membership) ---
                     cur.execute("SELECT owner_login, owner_type FROM repos WHERE repo_id = %s", (repo_id,))
