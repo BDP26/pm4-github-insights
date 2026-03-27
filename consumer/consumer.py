@@ -1,9 +1,8 @@
 import json
 import logging
 import os
-import threading
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 import psycopg2
 import psycopg2.extras
@@ -20,7 +19,6 @@ log = logging.getLogger(__name__)
 # ── Config ───────────────────────────────────────────────────────
 BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 TOPIC_RAW = "github.events.raw"
-TOPIC_STATUS = "github.events.status"
 GROUP_ID = "github-events-enricher"
 
 DB_DSN = (
@@ -42,28 +40,6 @@ GITHUB_HEADERS_REPO = {"Accept": "application/vnd.github+json", "User-Agent": "Z
 if GITHUB_TOKEN_REPO:
     GITHUB_HEADERS_REPO["Authorization"] = f"Bearer {GITHUB_TOKEN_REPO}"
 
-NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
-
-
-# ── Quota Tracking ──────────────────────────────────────────────
-class RateLimiter:
-    def __init__(self, max_per_hour):
-        self.max_per_hour = max_per_hour
-        self.calls = []
-
-    def can_call(self):
-        now = datetime.now()
-        self.calls = [t for t in self.calls if t > now - timedelta(hours=1)]
-        return len(self.calls) < self.max_per_hour
-
-    def record_call(self):
-        self.calls.append(datetime.now())
-
-
-user_limiter = RateLimiter(2300)
-repo_limiter = RateLimiter(2300)
-
-
 # ── Helpers ─────────────────────────────────────────────────────
 
 def db_connect():
@@ -76,27 +52,6 @@ def db_connect():
         except psycopg2.OperationalError as e:
             log.warning("DB not ready (%s), retrying in 3s...", e)
             time.sleep(3)
-
-
-def geocode(location: str) -> dict:
-    if not location: return {}
-    try:
-        r = requests.get(NOMINATIM_URL, params={"q": location, "format": "json", "limit": 1, "addressdetails": 1},
-                         headers={"User-Agent": "ZHAW-Explorer/2.0",
-                                  "Accept-Language": "en"},
-                         timeout=5)
-        time.sleep(1)  # Nominatim policy: 1 req/s — always sleep after request
-        if r.status_code == 200 and r.json():
-            h = r.json()[0]
-            adr = h.get("address", {})
-            return {
-                "country": adr.get("country"),
-                "country_code": (adr.get("country_code") or "").upper()[:2],
-                "lat": float(h.get("lat")), "lng": float(h.get("lon"))
-            }
-    except Exception as e:
-        log.warning("Geocode failed for %r: %s", location, e)
-    return {}
 
 
 def extract_detail(event: dict) -> str:
@@ -119,11 +74,8 @@ def enrich_user(cur, conn, username):
     cur.execute("SELECT login FROM organizations WHERE login = %s", (username,))
     if cur.fetchone(): return True
 
-    if not user_limiter.can_call(): return False
-
     try:
         r, meta = logged_request(cur, conn, "GET", f"https://api.github.com/users/{username}", headers=GITHUB_HEADERS_USER, timeout=5)
-        user_limiter.record_call()
         if r is None: return False
 
         if r.status_code == 404:
@@ -145,8 +97,7 @@ def enrich_user(cur, conn, username):
             actor_type = d.get("type")  # "User", "Organization", or "Bot"
 
             if actor_type == "User":
-                # Geo enrichment (lat/lng) is handled by the background geocoder thread,
-                # keeping it out of the Kafka hot path.
+                # Geo enrichment (lat/lng) is handled by the geocoder container.
                 cur.execute("""
                     INSERT INTO users (username, fetched_at, company, location,
                                        public_repos, followers, is_bot)
@@ -180,11 +131,9 @@ def enrich_user(cur, conn, username):
 def enrich_repo(cur, conn, full_name):
     cur.execute("SELECT repo_id FROM repos WHERE full_name = %s", (full_name,))
     if cur.fetchone(): return True
-    if not repo_limiter.can_call(): return False
 
     try:
         r, meta = logged_request(cur, conn, "GET", f"https://api.github.com/repos/{full_name}", headers=GITHUB_HEADERS_REPO, timeout=5)
-        repo_limiter.record_call()
         if r is None: return False
         if r.status_code == 200:
             d = r.json()
@@ -274,7 +223,6 @@ def logged_request(cur, conn, method, url, **kwargs):
             "http_version":    r.raw.version,
             "encoding":        r.encoding,
         }
-        insert_request_meta(cur, meta)
         return r, meta
     except requests.RequestException as exc:
         error_meta = {
@@ -293,41 +241,9 @@ def logged_request(cur, conn, method, url, **kwargs):
             "http_version":    None,
             "encoding":        None,
         }
-        insert_request_meta(cur, error_meta)
         log.warning("GitHub API request failed: %s", exc)
         return None, error_meta
 
-
-def insert_request_meta(cur, meta: dict) -> None:
-    """Insert a request metadata record into request_logs."""
-    cur.execute("""
-        INSERT INTO request_logs (
-            request_success, sent_at, received_at, elapsed_s,
-            method, url, status_code, reason, response_bytes,
-            redirects, final_url, http_version, encoding,
-            request_headers, response_headers, error
-        ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s, %s, %s
-        )
-    """, (
-        meta.get("request_success"),
-        meta.get("sent_at"),
-        meta.get("received_at"),
-        meta.get("elapsed_s"),
-        meta.get("method"),
-        meta.get("url"),
-        meta.get("status_code"),
-        meta.get("reason"),
-        meta.get("response_bytes"),
-        meta.get("redirects"),
-        meta.get("final_url"),
-        meta.get("http_version"),
-        meta.get("encoding"),
-        psycopg2.extras.Json(_redact_headers(meta.get("request_headers"))),
-        psycopg2.extras.Json(_redact_headers(meta.get("response_headers"))),
-        meta.get("error"),
-    ))
 
 # ── Kafka Startup Helpers ────────────────────────────────────────
 
@@ -404,53 +320,6 @@ def calculate_assigned_partitions(
     return [p for p in topic_partitions if p % total_instances == instance_index]
 
 
-# ── Background Geocoder ─────────────────────────────────────────
-
-def _geocode_pending_users() -> None:
-    """Background thread: geocode users with location text but no coordinates.
-
-    Runs independently of the Kafka loop so the 1 req/s Nominatim rate limit
-    never blocks event processing.  Also retroactively enriches users that were
-    inserted before geo enrichment worked (e.g. after a VM network fix).
-    """
-    conn = db_connect()
-    cur = conn.cursor()
-    log.info("Geocoder thread started")
-    while True:
-        try:
-            cur.execute("""
-                SELECT username, location FROM users
-                WHERE lat IS NULL AND location IS NOT NULL AND is_bot = FALSE
-                ORDER BY fetched_at DESC
-                LIMIT 50
-            """)
-            rows = cur.fetchall()
-            if not rows:
-                time.sleep(30)
-                continue
-            for username, location in rows:
-                geo = geocode(location)  # includes the 1 s Nominatim sleep
-                if geo:
-                    cur.execute("""
-                        UPDATE users
-                        SET country=%s, country_code=%s, lat=%s, lng=%s
-                        WHERE username=%s
-                    """, (geo.get("country"), geo.get("country_code"),
-                          geo.get("lat"), geo.get("lng"), username))
-                    conn.commit()
-                    log.info("Geocoded %s → %s (%s)", username, location, geo.get("country_code"))
-        except Exception as e:
-            log.error("Geocoder thread error: %s", e)
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-            if "connection" in str(e).lower():
-                conn = db_connect()
-                cur = conn.cursor()
-            time.sleep(10)
-
-
 # ── Main ────────────────────────────────────────────────────────
 
 def _is_non_bot_user(cur, username: str) -> bool:
@@ -464,10 +333,6 @@ def _is_non_bot_user(cur, username: str) -> bool:
 
 def main():
     log.info("Starting GitHub Events Consumer (Star Schema Mode)")
-
-    # 0. Background geocoder (runs independently of Kafka loop)
-    geo_thread = threading.Thread(target=_geocode_pending_users, daemon=True, name="geocoder")
-    geo_thread.start()
 
     # 1. Kafka Consumer Initialisierung
     multi_enabled, instance_index, total_instances = get_multi_instance_config()
@@ -501,18 +366,15 @@ def main():
         if not actual_partitions:
             raise SystemExit(f"Topic {TOPIC_RAW} has no partitions after retries — is kafka-init running?")
         assigned = calculate_assigned_partitions(instance_index, total_instances, actual_partitions)
-        tp_list = (
-            [TopicPartition(TOPIC_RAW, p) for p in assigned]
-            + [TopicPartition(TOPIC_STATUS, p) for p in assigned]
-        )
+        tp_list = [TopicPartition(TOPIC_RAW, p) for p in assigned]
         consumer.assign(tp_list)
         log.info(
-            "Multi-instance mode: instance %d/%d, assigned partitions %s on topics %s, %s",
-            instance_index, total_instances, assigned, TOPIC_RAW, TOPIC_STATUS,
+            "Multi-instance mode: instance %d/%d, assigned partitions %s on topic %s",
+            instance_index, total_instances, assigned, TOPIC_RAW,
         )
         _wait_for_coordinator(consumer, tp_list)
     else:
-        consumer.subscribe([TOPIC_RAW, TOPIC_STATUS])
+        consumer.subscribe([TOPIC_RAW])
 
     # 2. Datenbank-Verbindung (mit Retry-Logik)
     conn = db_connect()
@@ -522,13 +384,11 @@ def main():
 
     try:
         while True:
-            # Batch-poll: drain all available messages, process STATUS first
+            # Batch-poll: drain all available messages
             batch = consumer.consume(num_messages=100, timeout=1.0)
             if not batch:
                 continue
 
-            # Separate STATUS from RAW so status/request_logs are never blocked by slow enrichment
-            status_msgs = []
             raw_msgs = []
             coord_error_seen = False
             for m in batch:
@@ -543,32 +403,15 @@ def main():
                     else:
                         log.error("Kafka error: %s", err)
                     continue
-                if m.topic() == TOPIC_STATUS:
-                    status_msgs.append(m)
-                else:
-                    raw_msgs.append(m)
+                raw_msgs.append(m)
 
             if coord_error_seen:
                 time.sleep(_coord_backoff)
                 _coord_backoff = min(_coord_backoff * 2, 30.0)
-            elif status_msgs or raw_msgs:
+            elif raw_msgs:
                 _coord_backoff = 1.0  # reset on successful messages
 
-            # Process all STATUS messages first (fast inserts)
-            for m in status_msgs:
-                try:
-                    meta = json.loads(m.value().decode("utf-8"))
-                    insert_request_meta(cur, meta)
-                    conn.commit()
-                    consumer.commit(message=m, asynchronous=False)
-                except Exception as e:
-                    conn.rollback()
-                    log.error(f"Status Processing Error: {e}")
-                    if "connection" in str(e).lower():
-                        conn = db_connect()
-                        cur = conn.cursor()
-
-            # Then process RAW events
+            # Process RAW events
             for msg in raw_msgs:
                 try:
                     event = json.loads(msg.value().decode("utf-8"))
