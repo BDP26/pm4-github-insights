@@ -4,33 +4,33 @@
 
 ## Summary
 
-Three focused improvements to the GitHub Events pipeline:
+Four focused improvements to the GitHub Events pipeline:
 
 1. Extract geocoding into a dedicated container (remove from consumer)
 2. Track GitHub API rate limit headers in a new Kafka topic and DB table
 3. Fix consumer race conditions in multi-instance mode using DB-level claim stubs
+4. Extract a dedicated `db-writer` container for `github.events.status` and `github.ratelimit` — pure DB inserts, scales independently of enrichment
 
 ---
 
 ## Architecture Overview
 
 ```
-Producer ──► github.events.raw ──► Consumer (1 or 3 instances)
-         └──► github.ratelimit ◄──┘         │
-                    │                        │ INSERT stub → UPDATE
-                    ▼                        ▼
-          rate_limit_snapshots        users / repos / orgs
-                                            │
-                                   (lat IS NULL + geo_claimed_at IS NULL)
-                                            ▼
-                                    Geocoder container
-                                    (Nominatim, 1 req/s)
+Producer ──► github.events.raw    ──► Consumer (1 or 3 instances)
+         ├──► github.events.status ──► DB-Writer ──► request_logs
+         └──► github.ratelimit    ──►           └──► rate_limit_snapshots
+                                       Consumer ──► users / repos / orgs
+                                                        │
+                                             (lat IS NULL + geo_claimed_at IS NULL)
+                                                        ▼
+                                               Geocoder container
+                                               (Nominatim, 1 req/s)
 ```
 
-**New containers:** `geocoder`
+**New containers:** `geocoder`, `db-writer`
 **New Kafka topics:** `github.ratelimit` (3 partitions)
 **New DB objects:** `rate_limit_snapshots` table; `geo_claimed_at` column on `users` and `organizations`
-**Removed from consumer:** geocoding thread, `geocode()`, `NOMINATIM_URL`, `threading` import, `RateLimiter` class, `user_limiter`, `repo_limiter`
+**Removed from consumer:** geocoding thread, `geocode()`, `NOMINATIM_URL`, `threading` import, `RateLimiter` class, `user_limiter`, `repo_limiter`, `TOPIC_STATUS` handling, `insert_request_meta()`, priority-ordering logic (`status_msgs` / `raw_msgs` split)
 
 ---
 
@@ -113,6 +113,10 @@ Loop:
 Base image: `python:3.12-slim`
 Dependencies: `psycopg2-binary`, `requests`
 
+### API keys
+
+The geocoder calls **Nominatim** (OpenStreetMap), which is free and requires **no API key**. It only needs a valid `User-Agent` header (e.g. `"ZHAW-Explorer/2.0"`) and must respect the 1 req/s rate limit. The geocoder never calls the GitHub API.
+
 ### docker-compose.yml additions
 
 ```yaml
@@ -132,13 +136,73 @@ geocoder:
   restart: unless-stopped
 ```
 
-No Kafka dependency — the geocoder only needs DB access.
+No Kafka dependency, no API tokens — the geocoder only needs DB access.
 
 ---
 
-## 3. Consumer Changes
+## 3. New DB-Writer Container
 
-### 3a. Remove geocoding
+### Purpose
+
+Handles all fast DB-insert topics (`github.events.status`, `github.ratelimit`) independently of the enrichment consumer. This removes the priority-ordering workaround from the consumer and allows the two concerns to scale separately.
+
+### Files
+
+```
+db-writer/
+├── Dockerfile
+└── db_writer.py
+```
+
+### db_writer.py logic
+
+```
+Subscribe to: github.events.status, github.ratelimit
+
+Loop (consume batch):
+  For each message on github.events.status:
+    → INSERT INTO request_logs (...) — same as current insert_request_meta()
+    → commit offset
+
+  For each message on github.ratelimit:
+    → INSERT INTO rate_limit_snapshots (source, resource, limit_, used, remaining, reset_at, recorded_at)
+    → commit offset
+```
+
+No GitHub API calls. No enrichment. Stateless — can run as many replicas as needed.
+
+### Dockerfile
+
+Base image: `python:3.12-slim`
+Dependencies: `psycopg2-binary`, `confluent-kafka`
+
+### docker-compose.yml additions
+
+```yaml
+db-writer:
+  build: ./db-writer
+  container_name: db-writer
+  networks: [github-stream]
+  depends_on:
+    kafka:
+      condition: service_healthy
+    timescaledb:
+      condition: service_healthy
+  environment:
+    KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    DB_HOST: timescaledb
+    DB_PORT: "5432"
+    DB_NAME: github_events
+    DB_USER: github
+    DB_PASSWORD: github_secret
+  restart: unless-stopped
+```
+
+---
+
+## 4. Consumer Changes (enrichment only)
+
+### 4a. Remove geocoding
 
 Delete from `consumer.py`:
 - `_geocode_pending_users()` function
@@ -148,7 +212,7 @@ Delete from `consumer.py`:
 - `import threading`
 - `RateLimiter` class, `user_limiter`, `repo_limiter` instances
 
-### 3b. Race condition fix — claim-before-fetch pattern
+### 4b. Race condition fix — claim-before-fetch pattern
 
 **For `enrich_user()`:**
 
@@ -186,7 +250,7 @@ Delete from `consumer.py`:
    UPDATE repos SET fetched_at=NOW(), name=, full_name=, ... WHERE repo_id=%s
 ```
 
-### 3c. Rate limit publishing
+### 4c. Rate limit publishing
 
 Extract a helper `extract_ratelimit(headers, source)` used in `logged_request()`:
 
@@ -217,9 +281,9 @@ New `TOPIC_RATELIMIT = "github.ratelimit"` constant.
 
 ---
 
-## 4. Producer Changes
+## 5. Producer Changes
 
-### 4a. Rate limit publishing
+### 5a. Rate limit publishing
 
 Add `TOPIC_RATELIMIT = "github.ratelimit"` constant.
 
@@ -243,7 +307,7 @@ def publish_ratelimit(producer: Producer, data: dict) -> None:
     )
 ```
 
-### 4b. kafka-init topic creation
+### 5b. kafka-init topic creation
 
 Add to `kafka-init` command:
 ```bash
@@ -255,7 +319,7 @@ Add to `kafka-init` command:
 
 ---
 
-## 5. Error Handling
+## 6. Error Handling
 
 - **Geocoder DB disconnect:** reconnect loop (same pattern as consumer)
 - **Geocoder Nominatim failure:** log warning, `geo_claimed_at` stays set (won't retry), processing continues
@@ -264,7 +328,7 @@ Add to `kafka-init` command:
 
 ---
 
-## 6. Kafka Topics Summary
+## 7. Kafka Topics Summary
 
 | Topic | Partitions | Producer | Consumer |
 |---|---|---|---|
@@ -274,13 +338,15 @@ Add to `kafka-init` command:
 
 ---
 
-## 7. Files Affected
+## 8. Files Affected
 
 | File | Change |
 |---|---|
-| `consumer/consumer.py` | Remove geocoding; fix enrich_user/repo; add ratelimit publish+consume |
+| `consumer/consumer.py` | Remove geocoding, TOPIC_STATUS handling, priority-ordering; fix enrich_user/repo; add ratelimit publish; add confluent Producer |
 | `producer/producer.py` | Add extract_ratelimit + publish_ratelimit |
 | `geocoder/geocoder.py` | New file |
 | `geocoder/Dockerfile` | New file |
+| `db-writer/db_writer.py` | New file |
+| `db-writer/Dockerfile` | New file |
 | `db/migrations/002_geocoder_and_ratelimit.sql` | geo_claimed_at columns + rate_limit_snapshots table |
-| `docker-compose.yml` | Add geocoder service; add github.ratelimit to kafka-init |
+| `docker-compose.yml` | Add geocoder + db-writer services; add github.ratelimit to kafka-init |
