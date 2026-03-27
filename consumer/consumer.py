@@ -1,13 +1,14 @@
 import json
 import logging
 import os
+import threading
 import time
 from datetime import datetime, timezone, timedelta
 
 import psycopg2
 import psycopg2.extras
 import requests
-from confluent_kafka import Consumer, KafkaError
+from confluent_kafka import Consumer, KafkaError, KafkaException
 
 # ── Logging ──────────────────────────────────────────────────────
 logging.basicConfig(
@@ -84,17 +85,17 @@ def geocode(location: str) -> dict:
                          headers={"User-Agent": "ZHAW-Explorer/2.0",
                                   "Accept-Language": "en"},
                          timeout=5)
+        time.sleep(1)  # Nominatim policy: 1 req/s — always sleep after request
         if r.status_code == 200 and r.json():
             h = r.json()[0]
             adr = h.get("address", {})
-            time.sleep(1)  # Nominatim policy: 1 req/s
             return {
                 "country": adr.get("country"),
                 "country_code": (adr.get("country_code") or "").upper()[:2],
                 "lat": float(h.get("lat")), "lng": float(h.get("lon"))
             }
-    except:
-        pass
+    except Exception as e:
+        log.warning("Geocode failed for %r: %s", location, e)
     return {}
 
 
@@ -144,13 +145,13 @@ def enrich_user(cur, conn, username):
             actor_type = d.get("type")  # "User", "Organization", or "Bot"
 
             if actor_type == "User":
-                geo = geocode(d.get("location"))
+                # Geo enrichment (lat/lng) is handled by the background geocoder thread,
+                # keeping it out of the Kafka hot path.
                 cur.execute("""
-                    INSERT INTO users (username, fetched_at, company, location, country, country_code,
-                                       lat, lng, public_repos, followers, is_bot)
-                    VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, FALSE) ON CONFLICT DO NOTHING
-                """, (d['login'], d.get('company'), d.get('location'), geo.get('country'),
-                      geo.get('country_code'), geo.get('lat'), geo.get('lng'),
+                    INSERT INTO users (username, fetched_at, company, location,
+                                       public_repos, followers, is_bot)
+                    VALUES (%s, NOW(), %s, %s, %s, %s, FALSE) ON CONFLICT DO NOTHING
+                """, (d['login'], d.get('company'), d.get('location'),
                       d.get('public_repos'), d.get('followers')))
 
             elif actor_type == "Bot":
@@ -225,6 +226,29 @@ def _redact_headers(headers):
         else:
             redacted[name] = value
     return redacted
+
+
+def extract_ratelimit(headers: dict, source: str) -> dict | None:
+    """Extract GitHub rate limit fields from response headers.
+
+    Returns None if X-RateLimit-Remaining is absent (non-GitHub response).
+    """
+    remaining = headers.get("X-RateLimit-Remaining")
+    if remaining is None:
+        return None
+    reset_ts = headers.get("X-RateLimit-Reset")
+    return {
+        "source": source,
+        "resource": headers.get("X-RateLimit-Resource", "core"),
+        "limit": int(headers.get("X-RateLimit-Limit", 0)),
+        "used": int(headers.get("X-RateLimit-Used", 0)),
+        "remaining": int(remaining),
+        "reset_at": (
+            datetime.fromtimestamp(int(reset_ts), tz=timezone.utc).isoformat()
+            if reset_ts else None
+        ),
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def logged_request(cur, conn, method, url, **kwargs):
@@ -305,6 +329,128 @@ def insert_request_meta(cur, meta: dict) -> None:
         meta.get("error"),
     ))
 
+# ── Kafka Startup Helpers ────────────────────────────────────────
+
+def _wait_for_coordinator(consumer: Consumer, tp_list: list, max_wait_s: int = 60) -> None:
+    """Block until the Kafka group coordinator is ready.
+
+    Fetching committed offsets is the lightest operation that requires an
+    active coordinator.  Retries with exponential backoff so consumers do
+    not start processing before the coordinator is elected.
+    """
+    delay = 2.0
+    elapsed = 0.0
+    while elapsed < max_wait_s:
+        try:
+            consumer.committed(tp_list, timeout=5)
+            log.info("Group coordinator is ready")
+            return
+        except KafkaException as e:
+            log.warning("Group coordinator not ready (%s), retrying in %.0fs…", e, delay)
+        except Exception as e:
+            log.warning("Coordinator check error (%s), retrying in %.0fs…", e, delay)
+        time.sleep(delay)
+        elapsed += delay
+        delay = min(delay * 2, 15.0)
+    log.warning("Coordinator readiness check timed out after %.0fs — proceeding", max_wait_s)
+
+
+# ── Multi-Instance Partition Config ─────────────────────────────
+
+def get_multi_instance_config():
+    """Parse multi-instance env vars.
+
+    Returns:
+        (enabled: bool, instance_index: int|None, total_instances: int|None)
+
+    Raises:
+        SystemExit: if enabled but KAFKA_INSTANCE_INDEX is missing.
+    """
+    enabled = os.getenv("KAFKA_MULTI_INSTANCE_ENABLED", "false").lower() == "true"
+    if not enabled:
+        return False, None, None
+
+    index_str = os.getenv("KAFKA_INSTANCE_INDEX")
+    if index_str is None:
+        raise SystemExit(
+            "KAFKA_MULTI_INSTANCE_ENABLED=true but KAFKA_INSTANCE_INDEX is not set. "
+            "Set KAFKA_INSTANCE_INDEX to 0, 1, or 2 (or up to KAFKA_TOTAL_INSTANCES-1)."
+        )
+
+    total_instances = int(os.getenv("KAFKA_TOTAL_INSTANCES", "3"))
+    return True, int(index_str), total_instances
+
+
+def calculate_assigned_partitions(
+    instance_index: int,
+    total_instances: int,
+    topic_partitions: list,
+) -> list:
+    """Deterministically assign partitions to this instance.
+
+    Formula: assigned = [p for p in topic_partitions if p % total_instances == instance_index]
+
+    Args:
+        instance_index:   0-based index of this consumer instance.
+        total_instances:  total number of consumer instances.
+        topic_partitions: list of actual partition IDs for the topic.
+    """
+    if total_instances > len(topic_partitions):
+        log.warning(
+            "KAFKA_TOTAL_INSTANCES (%d) > actual partitions (%d); "
+            "some instances will receive no partitions.",
+            total_instances, len(topic_partitions),
+        )
+    return [p for p in topic_partitions if p % total_instances == instance_index]
+
+
+# ── Background Geocoder ─────────────────────────────────────────
+
+def _geocode_pending_users() -> None:
+    """Background thread: geocode users with location text but no coordinates.
+
+    Runs independently of the Kafka loop so the 1 req/s Nominatim rate limit
+    never blocks event processing.  Also retroactively enriches users that were
+    inserted before geo enrichment worked (e.g. after a VM network fix).
+    """
+    conn = db_connect()
+    cur = conn.cursor()
+    log.info("Geocoder thread started")
+    while True:
+        try:
+            cur.execute("""
+                SELECT username, location FROM users
+                WHERE lat IS NULL AND location IS NOT NULL AND is_bot = FALSE
+                ORDER BY fetched_at DESC
+                LIMIT 50
+            """)
+            rows = cur.fetchall()
+            if not rows:
+                time.sleep(30)
+                continue
+            for username, location in rows:
+                geo = geocode(location)  # includes the 1 s Nominatim sleep
+                if geo:
+                    cur.execute("""
+                        UPDATE users
+                        SET country=%s, country_code=%s, lat=%s, lng=%s
+                        WHERE username=%s
+                    """, (geo.get("country"), geo.get("country_code"),
+                          geo.get("lat"), geo.get("lng"), username))
+                    conn.commit()
+                    log.info("Geocoded %s → %s (%s)", username, location, geo.get("country_code"))
+        except Exception as e:
+            log.error("Geocoder thread error: %s", e)
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            if "connection" in str(e).lower():
+                conn = db_connect()
+                cur = conn.cursor()
+            time.sleep(10)
+
+
 # ── Main ────────────────────────────────────────────────────────
 
 def _is_non_bot_user(cur, username: str) -> bool:
@@ -319,18 +465,60 @@ def _is_non_bot_user(cur, username: str) -> bool:
 def main():
     log.info("Starting GitHub Events Consumer (Star Schema Mode)")
 
+    # 0. Background geocoder (runs independently of Kafka loop)
+    geo_thread = threading.Thread(target=_geocode_pending_users, daemon=True, name="geocoder")
+    geo_thread.start()
+
     # 1. Kafka Consumer Initialisierung
+    multi_enabled, instance_index, total_instances = get_multi_instance_config()
+
+    # Each instance needs a unique group ID when using assign().
+    # Sharing a group ID across assign()-based consumers bypasses Kafka's rebalance
+    # protocol while still registering with the group coordinator, which causes
+    # NOT_COORDINATOR errors. Per-instance group IDs give each consumer its own
+    # independent offset tracking for its pinned partition.
+    effective_group_id = f"{GROUP_ID}-p{instance_index}" if multi_enabled else GROUP_ID
+
     consumer = Consumer({
         "bootstrap.servers": BOOTSTRAP_SERVERS,
-        "group.id": GROUP_ID,
+        "group.id": effective_group_id,
         "auto.offset.reset": "earliest",
         "enable.auto.commit": False
     })
-    consumer.subscribe([TOPIC_RAW, TOPIC_STATUS])
+
+    if multi_enabled:
+        # Query actual partition count from broker metadata, then pin to our slice.
+        # Retry until the topic exists — kafka-init may not have run yet.
+        from confluent_kafka import TopicPartition
+        actual_partitions = []
+        for attempt in range(10):
+            metadata = consumer.list_topics(TOPIC_RAW, timeout=10)
+            actual_partitions = sorted(metadata.topics[TOPIC_RAW].partitions.keys())
+            if actual_partitions:
+                break
+            log.warning("Topic %s has no partitions yet, retrying in 3s (%d/10)…", TOPIC_RAW, attempt + 1)
+            time.sleep(3)
+        if not actual_partitions:
+            raise SystemExit(f"Topic {TOPIC_RAW} has no partitions after retries — is kafka-init running?")
+        assigned = calculate_assigned_partitions(instance_index, total_instances, actual_partitions)
+        tp_list = (
+            [TopicPartition(TOPIC_RAW, p) for p in assigned]
+            + [TopicPartition(TOPIC_STATUS, p) for p in assigned]
+        )
+        consumer.assign(tp_list)
+        log.info(
+            "Multi-instance mode: instance %d/%d, assigned partitions %s on topics %s, %s",
+            instance_index, total_instances, assigned, TOPIC_RAW, TOPIC_STATUS,
+        )
+        _wait_for_coordinator(consumer, tp_list)
+    else:
+        consumer.subscribe([TOPIC_RAW, TOPIC_STATUS])
 
     # 2. Datenbank-Verbindung (mit Retry-Logik)
     conn = db_connect()
     cur = conn.cursor()
+
+    _coord_backoff = 1.0  # exponential backoff for NOT_COORDINATOR errors
 
     try:
         while True:
@@ -342,14 +530,29 @@ def main():
             # Separate STATUS from RAW so status/request_logs are never blocked by slow enrichment
             status_msgs = []
             raw_msgs = []
+            coord_error_seen = False
             for m in batch:
                 if m.error():
-                    log.error(f"Kafka error: {m.error()}")
+                    err = m.error()
+                    if err.code() == KafkaError.NOT_COORDINATOR:
+                        coord_error_seen = True
+                        log.warning(
+                            "Group coordinator not ready (transient), backing off %.1fs…",
+                            _coord_backoff,
+                        )
+                    else:
+                        log.error("Kafka error: %s", err)
                     continue
                 if m.topic() == TOPIC_STATUS:
                     status_msgs.append(m)
                 else:
                     raw_msgs.append(m)
+
+            if coord_error_seen:
+                time.sleep(_coord_backoff)
+                _coord_backoff = min(_coord_backoff * 2, 30.0)
+            elif status_msgs or raw_msgs:
+                _coord_backoff = 1.0  # reset on successful messages
 
             # Process all STATUS messages first (fast inserts)
             for m in status_msgs:
