@@ -6,7 +6,7 @@ ALTER TABLE organizations ADD COLUMN IF NOT EXISTS geo_claimed_at TIMESTAMPTZ;
 
 -- Store GitHub API rate limit snapshots from producer and consumer
 CREATE TABLE IF NOT EXISTS rate_limit_snapshots (
-    id           SERIAL PRIMARY KEY,
+    id           SERIAL,
     recorded_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     source       TEXT NOT NULL CHECK (source IN ('producer', 'consumer')),
     resource     TEXT,             -- 'core', 'search', etc.

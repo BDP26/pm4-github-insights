@@ -6,7 +6,7 @@ import time
 import psycopg2
 import psycopg2.extensions
 import psycopg2.extras
-from confluent_kafka import Consumer, KafkaError
+from confluent_kafka import Consumer, KafkaError, KafkaException
 
 logging.basicConfig(
     level=logging.INFO,
@@ -98,6 +98,29 @@ def handle_ratelimit_message(cur: psycopg2.extensions.cursor, conn: psycopg2.ext
         conn.rollback()
 
 
+def _wait_for_kafka(consumer: Consumer, max_wait_s: int = 60) -> None:
+    """Block until the Kafka group coordinator is ready.
+
+    Uses the same exponential-backoff pattern as consumer.py so that
+    db-writer does not start processing before the coordinator is elected.
+    """
+    delay = 2.0
+    elapsed = 0.0
+    while elapsed < max_wait_s:
+        try:
+            consumer.committed([], timeout=5)
+            log.info("Kafka group coordinator is ready")
+            return
+        except KafkaException as e:
+            log.warning("Kafka not ready (%s), retrying in %.0fs…", e, delay)
+        except Exception as e:
+            log.warning("Kafka coordinator check error (%s), retrying in %.0fs…", e, delay)
+        time.sleep(delay)
+        elapsed += delay
+        delay = min(delay * 2, 15.0)
+    log.warning("Kafka readiness check timed out after %.0fs — proceeding", max_wait_s)
+
+
 def main():
     log.info("Starting DB Writer")
     conn = db_connect()
@@ -110,16 +133,28 @@ def main():
         "enable.auto.commit": False,
     })
     consumer.subscribe([TOPIC_STATUS, TOPIC_RATELIMIT])
+    _wait_for_kafka(consumer)
+
+    _coord_backoff = 1.0
 
     try:
         while True:
             batch = consumer.consume(num_messages=100, timeout=1.0)
             if not batch:
                 continue
+
+            coord_error_seen = False
             for msg in batch:
                 if msg.error():
-                    if msg.error().code() != KafkaError._PARTITION_EOF:
-                        log.error("Kafka error: %s", msg.error())
+                    err = msg.error()
+                    if err.code() == KafkaError.NOT_COORDINATOR:
+                        coord_error_seen = True
+                        log.warning(
+                            "Group coordinator not ready (transient), backing off %.1fs…",
+                            _coord_backoff,
+                        )
+                    elif err.code() != KafkaError._PARTITION_EOF:
+                        log.error("Kafka error: %s", err)
                     continue
                 try:
                     payload = json.loads(msg.value().decode("utf-8"))
@@ -135,6 +170,18 @@ def main():
                         # on the next poll (at-least-once delivery guarantee).
                         conn = db_connect()
                         cur = conn.cursor()
+
+            if coord_error_seen:
+                time.sleep(_coord_backoff)
+                _coord_backoff = min(_coord_backoff * 2, 30.0)
+                # Force group re-join: sleeping alone leaves librdkafka in a broken
+                # state where consume() returns empty batches indefinitely.
+                log.info("Forcing Kafka group re-join after NOT_COORDINATOR…")
+                consumer.unsubscribe()
+                _wait_for_kafka(consumer)
+                consumer.subscribe([TOPIC_STATUS, TOPIC_RATELIMIT])
+            else:
+                _coord_backoff = 1.0
     except KeyboardInterrupt:
         log.info("DB Writer stopped")
     finally:

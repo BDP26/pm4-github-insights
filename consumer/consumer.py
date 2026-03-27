@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 # ── Config ───────────────────────────────────────────────────────
 BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 TOPIC_RAW = "github.events.raw"
+TOPIC_STATUS = "github.events.status"
 TOPIC_RATELIMIT = "github.ratelimit"
 GROUP_ID = "github-events-enricher"
 
@@ -341,6 +342,21 @@ def _publish_ratelimit(headers: dict) -> None:
         log.warning("Failed to publish rate limit snapshot: %s", e)
 
 
+def _publish_status(meta: dict) -> None:
+    """Publish HTTP request metadata to github.events.status if producer is available."""
+    if _kafka_producer is None:
+        return
+    try:
+        _kafka_producer.produce(
+            topic=TOPIC_STATUS,
+            key=f"status-{int(time.time())}",
+            value=json.dumps(meta),
+        )
+        _kafka_producer.poll(0)
+    except Exception as e:
+        log.warning("Failed to publish request status: %s", e)
+
+
 def logged_request(cur, conn, method, url, **kwargs):
     """Perform an HTTP request and log metadata directly to request_logs."""
     sent_at = datetime.now(timezone.utc)
@@ -365,6 +381,7 @@ def logged_request(cur, conn, method, url, **kwargs):
             "encoding":        r.encoding,
         }
         _publish_ratelimit(r.headers)
+        _publish_status(meta)
         return r, meta
     except requests.RequestException as exc:
         error_meta = {
@@ -500,6 +517,7 @@ def main():
         "enable.auto.commit": False
     })
 
+    tp_list = []  # populated in multi-instance mode; kept in scope for reconnect loop
     if multi_enabled:
         # Query actual partition count from broker metadata, then pin to our slice.
         # Retry until the topic exists — kafka-init may not have run yet.
@@ -524,6 +542,7 @@ def main():
         _wait_for_coordinator(consumer, tp_list)
     else:
         consumer.subscribe([TOPIC_RAW])
+        _wait_for_coordinator(consumer, [])
 
     # 2. Datenbank-Verbindung (mit Retry-Logik)
     conn = db_connect()
@@ -557,6 +576,20 @@ def main():
             if coord_error_seen:
                 time.sleep(_coord_backoff)
                 _coord_backoff = min(_coord_backoff * 2, 30.0)
+                # Sleeping alone is not enough: librdkafka's internal group-membership
+                # state is broken after NOT_COORDINATOR.  Subsequent consume() calls
+                # return empty batches indefinitely without logging anything.
+                # Force a full group re-join by tearing down and rebuilding the
+                # partition assignment / subscription.
+                log.info("Forcing Kafka group re-join after NOT_COORDINATOR…")
+                if multi_enabled:
+                    consumer.unassign()
+                    _wait_for_coordinator(consumer, tp_list)
+                    consumer.assign(tp_list)
+                else:
+                    consumer.unsubscribe()
+                    _wait_for_coordinator(consumer, [])
+                    consumer.subscribe([TOPIC_RAW])
             elif raw_msgs:
                 _coord_backoff = 1.0  # reset on successful messages
 
