@@ -20,11 +20,12 @@ def make_cursor(fast_path_row=None, claim_row=None):
     """Return a mock cursor.
 
     call order for fetchone():
-      1st → fast-path SELECT (fetched_at IS NOT NULL check)
-      2nd → claim INSERT RETURNING
+      1st → fast-path SELECT users (fetched_at IS NOT NULL check)
+      2nd → fast-path SELECT organizations (fetched_at IS NOT NULL check)
+      3rd → claim INSERT RETURNING
     """
     cur = MagicMock()
-    cur.fetchone.side_effect = [fast_path_row, claim_row, None, None]
+    cur.fetchone.side_effect = [fast_path_row, None, claim_row, None, None]
     return cur
 
 
@@ -197,6 +198,20 @@ def test_404_finalises_stub_to_prevent_future_api_calls():
     assert result is False
     updates = get_update_calls(cur, "users")
     assert updates, "Must UPDATE stub row on 404 to finalise it"
+
+
+# ── Stub cleanup on failure ───────────────────────────────────────
+
+def test_exception_during_api_call_deletes_stub():
+    """Exception inside try block → stub is deleted so other consumers can retry."""
+    from consumer import enrich_user
+    cur = make_cursor(fast_path_row=None, claim_row=("octocat",))
+    conn = make_conn()
+    with patch("consumer.logged_request", side_effect=RuntimeError("connection reset")):
+        result = enrich_user(cur, conn, "octocat")
+    assert result is False
+    delete_calls = [c for c in cur.execute.call_args_list if "DELETE FROM users" in str(c)]
+    assert delete_calls, "Must DELETE stub on exception so other consumers can retry"
 
 
 # ── _is_non_bot_user ──────────────────────────────────────────────

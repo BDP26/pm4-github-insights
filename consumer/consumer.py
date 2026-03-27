@@ -66,65 +66,123 @@ def extract_detail(event: dict) -> str:
 
 # ── Enrichment ──────────────────────────────────────────────────
 
+def _delete_user_stub(cur, conn, username: str) -> None:
+    """Delete an unclaimed stub row so other consumers can retry enrichment."""
+    try:
+        cur.execute(
+            "DELETE FROM users WHERE username = %s AND fetched_at IS NULL",
+            (username,),
+        )
+        conn.commit()
+    except Exception as cleanup_err:
+        log.warning("Could not clean up stub for %s: %s", username, cleanup_err)
+
+
 def enrich_user(cur, conn, username):
-    # Fast path: already known as user or bot
-    cur.execute("SELECT username FROM users WHERE username = %s", (username,))
-    if cur.fetchone(): return True
-    # Fast path: already known as org
-    cur.execute("SELECT login FROM organizations WHERE login = %s", (username,))
-    if cur.fetchone(): return True
+    """Enrich a GitHub actor using the claim-before-fetch pattern.
+
+    1. Fast path: already fully enriched → return True without API call.
+    2. Claim stub via INSERT ... ON CONFLICT DO NOTHING RETURNING.
+       If no row returned, another consumer owns this username → return False.
+    3. Call GitHub API, then UPDATE the stub row with full data.
+    """
+    # Fast path: fully enriched user
+    cur.execute(
+        "SELECT username FROM users WHERE username = %s AND fetched_at IS NOT NULL",
+        (username,),
+    )
+    if cur.fetchone():
+        return True
+
+    # Fast path: fully enriched org
+    cur.execute(
+        "SELECT login FROM organizations WHERE login = %s AND fetched_at IS NOT NULL",
+        (username,),
+    )
+    if cur.fetchone():
+        return True
+
+    # Claim the slot — only one consumer wins
+    cur.execute(
+        "INSERT INTO users (username) VALUES (%s) ON CONFLICT DO NOTHING RETURNING username",
+        (username,),
+    )
+    if not cur.fetchone():
+        # Another consumer already inserted a stub or full row
+        return False
+    conn.commit()  # make stub visible to other consumers immediately
 
     try:
-        r, meta = logged_request(cur, conn, "GET", f"https://api.github.com/users/{username}", headers=GITHUB_HEADERS_USER, timeout=5)
-        if r is None: return False
+        r, _ = logged_request(
+            cur, conn, "GET",
+            f"https://api.github.com/users/{username}",
+            headers=GITHUB_HEADERS_USER,
+            timeout=5,
+        )
+        if r is None:
+            # Network error — delete stub so another consumer can retry
+            _delete_user_stub(cur, conn, username)
+            return False
 
         if r.status_code == 404:
-            # Username unresolvable — insert stub so we don't retry on every event.
-            # `username` is used (not d['login']) because there is no response body on 404.
-            # is_bot defaults to FALSE (column is NOT NULL DEFAULT FALSE).
-            # Stubs pass the org_members guard (AND is_bot = FALSE) but lack location/repo
-            # data, so they won't distort geo or country statistics.
             log.info("Stored 404 stub for unresolvable actor: %s", username)
-            cur.execute("""
-                INSERT INTO users (username, fetched_at)
-                VALUES (%s, NOW()) ON CONFLICT DO NOTHING
-            """, (username,))
+            cur.execute(
+                "UPDATE users SET fetched_at = NOW() WHERE username = %s",
+                (username,),
+            )
             conn.commit()
             return False
 
         if r.status_code == 200:
             d = r.json()
-            actor_type = d.get("type")  # "User", "Organization", or "Bot"
+            actor_type = d.get("type")
 
             if actor_type == "User":
-                # Geo enrichment (lat/lng) is handled by the geocoder container.
                 cur.execute("""
-                    INSERT INTO users (username, fetched_at, company, location,
-                                       public_repos, followers, is_bot)
-                    VALUES (%s, NOW(), %s, %s, %s, %s, FALSE) ON CONFLICT DO NOTHING
-                """, (d['login'], d.get('company'), d.get('location'),
-                      d.get('public_repos'), d.get('followers')))
+                    UPDATE users
+                    SET fetched_at    = NOW(),
+                        company       = %s,
+                        location      = %s,
+                        public_repos  = %s,
+                        followers     = %s,
+                        is_bot        = FALSE
+                    WHERE username = %s
+                """, (d.get("company"), d.get("location"),
+                      d.get("public_repos"), d.get("followers"),
+                      d["login"]))
+                conn.commit()
+                return True
 
             elif actor_type == "Bot":
-                # Bots: stored in users with is_bot=TRUE, no geo/profile data
-                log.info("Stored bot actor: %s", d['login'])
-                cur.execute("""
-                    INSERT INTO users (username, fetched_at, is_bot)
-                    VALUES (%s, NOW(), %s) ON CONFLICT DO NOTHING
-                """, (d['login'], True))
+                log.info("Stored bot actor: %s", d["login"])
+                cur.execute(
+                    "UPDATE users SET fetched_at = NOW(), is_bot = %s WHERE username = %s",
+                    (True, d["login"]),
+                )
+                conn.commit()
+                return True
 
             else:
-                # Organization
+                # Organization: insert into organizations, remove stub from users
                 cur.execute("""
-                    INSERT INTO organizations (login, fetched_at, name, description, location,
-                                               public_repos, created_at)
-                    VALUES (%s, NOW(), %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING
-                """,
-                            (d['login'], d.get('name'), d.get('description'), d.get('location'),
-                             d.get('public_repos'), d.get('created_at')))
-            return True
+                    INSERT INTO organizations
+                        (login, fetched_at, name, description, location,
+                         public_repos, created_at)
+                    VALUES (%s, NOW(), %s, %s, %s, %s, %s)
+                    ON CONFLICT DO NOTHING
+                """, (d["login"], d.get("name"), d.get("description"),
+                      d.get("location"), d.get("public_repos"), d.get("created_at")))
+                # Remove the users stub for this org actor
+                cur.execute(
+                    "DELETE FROM users WHERE username = %s AND fetched_at IS NULL",
+                    (username,),
+                )
+                conn.commit()
+                return True
+
     except Exception as e:
-        log.error(f"User API Error: {e}")
+        log.error("User API Error for %s: %s", username, e)
+        _delete_user_stub(cur, conn, username)
     return False
 
 
