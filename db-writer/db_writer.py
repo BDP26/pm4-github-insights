@@ -163,13 +163,14 @@ def main():
                     elif msg.topic() == TOPIC_RATELIMIT:
                         handle_ratelimit_message(cur, conn, payload)
                     consumer.commit(message=msg, asynchronous=False)
-                except Exception as e:
-                    log.error("Message processing error: %s", e)
-                    if "connection" in str(e).lower():
-                        # Message offset is not committed — Kafka will re-deliver it
-                        # on the next poll (at-least-once delivery guarantee).
-                        conn = db_connect()
-                        cur = conn.cursor()
+                except psycopg2.OperationalError as e:
+                    log.error("Database connection error while processing message: %s", e)
+                    # Message offset is not committed — Kafka will re-deliver it
+                    # on the next poll (at-least-once delivery guarantee).
+                    conn = db_connect()
+                    cur = conn.cursor()
+                # Let all other exceptions propagate so that we do not commit
+                # Kafka offsets for messages that failed to be written to the DB.
 
             if coord_error_seen:
                 time.sleep(_coord_backoff)
