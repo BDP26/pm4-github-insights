@@ -56,6 +56,14 @@ CREATE TABLE IF NOT EXISTS repos (
     topics              TEXT[],        -- PostgreSQL Array für Tags
     stargazers_count    INTEGER DEFAULT 0,
     forks_count         INTEGER DEFAULT 0,
+    watchers_count      INTEGER DEFAULT 0,
+    has_issues          BOOLEAN,
+    open_issues_count   INTEGER,
+    has_projects        BOOLEAN,
+    has_downloads       BOOLEAN,
+    archived            BOOLEAN,
+    disabled            BOOLEAN,
+    homepage            TEXT,
     size                INTEGER,
     created_at          TIMESTAMPTZ,
     pushed_at           TIMESTAMPTZ

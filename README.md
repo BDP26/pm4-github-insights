@@ -214,6 +214,9 @@ Rebuild only the affected container — infrastructure stays up, data is preserv
 ```bash
 # Consumer changed (consumer/consumer.py or consumer/Dockerfile)
 docker compose --profile single-consumer up -d --build consumer
+# Consumer changed (consumer/consumer.py or consumer/Dockerfile)
+docker compose --profile multi-consumer down -v
+docker compose --profile multi-consumer up -d --build
 
 # Producer changed (producer/producer.py or producer/Dockerfile)
 docker compose up -d --build producer
@@ -236,7 +239,7 @@ docker compose restart grafana
 
 ```bash
 docker compose down -v                                    # deletes all data
-docker compose --profile single-consumer up --build       # re-creates DB with new schema
+docker compose --profile multi-consumer up --build       # re-creates DB with new schema
 ```
 
 ### Applying a DB migration to a running stack
