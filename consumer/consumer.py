@@ -196,6 +196,11 @@ def enrich_user(cur, conn, username):
                 conn.commit()
                 return True
 
+        else:
+            log.warning("User API %s returned %s for %s", r.status_code, r.reason, username)
+            _delete_user_stub(cur, conn, username)
+            return False
+
     except Exception as e:
         log.error("User API Error for %s: %s", username, e)
         _delete_user_stub(cur, conn, username)
@@ -282,6 +287,10 @@ def enrich_repo(cur, conn, repo_id: int, full_name: str):
             ))
             conn.commit()
             return True
+        else:
+            log.warning("Repo API %s returned %s for %s", r.status_code, r.reason, full_name)
+            _delete_repo_stub(cur, conn, repo_id)
+            return False
     except Exception as e:
         log.error("Repo API Error for %s: %s", full_name, e)
         _delete_repo_stub(cur, conn, repo_id)
@@ -393,6 +402,15 @@ def logged_request(cur, conn, method, url, **kwargs):
         }
         _publish_ratelimit(r.headers)
         _publish_status(meta)
+
+        # Pause when rate-limited (403/429) until reset
+        if r.status_code in (403, 429):
+            reset_ts = r.headers.get("X-RateLimit-Reset")
+            if reset_ts:
+                wait = max(int(reset_ts) - int(datetime.now(timezone.utc).timestamp()), 1)
+                log.warning("Rate-limited (%s). Sleeping %ds until reset.", r.status_code, wait)
+                time.sleep(wait)
+
         return r, meta
     except requests.RequestException as exc:
         error_meta = {
