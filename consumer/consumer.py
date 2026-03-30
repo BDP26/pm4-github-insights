@@ -679,7 +679,8 @@ def main():
 
                         if owner_type == 'Organization':
                             enrich_user(cur, conn, owner_login)
-                            if _is_non_bot_user(cur, actor):
+                            cur.execute("SELECT 1 FROM organizations WHERE login = %s", (owner_login,))
+                            if cur.fetchone() and _is_non_bot_user(cur, actor):
                                 cur.execute("""
                                     INSERT INTO organization_members (org_login, user_username, role)
                                     VALUES (%s, %s, 'contributor') ON CONFLICT DO NOTHING
