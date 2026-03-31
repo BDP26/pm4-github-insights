@@ -282,7 +282,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT \n  sum(response_bytes) / 1024.0 / 1024.0 as \"MB\"\nFROM request_logs\nWHERE received_at >= date_trunc('hour', now());",
+          "rawSql": "SELECT \n  sum(response_bytes) / 1024.0 / 1024.0 as \"MB\"\nFROM request_logs\n-- Nimmt genau die letzten 60 Minuten ab jetzt\nWHERE received_at >= now() - interval '1 hour'\n  AND response_headers IS NOT NULL;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -531,7 +531,7 @@
           }
         }
       ],
-      "title": "API Requests Total",
+      "title": "",
       "type": "stat"
     },
     {
