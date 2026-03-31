@@ -531,7 +531,7 @@
           }
         }
       ],
-      "title": "",
+      "title": "API Requests Total",
       "type": "stat"
     },
     {
@@ -778,6 +778,6 @@
   "timezone": "browser",
   "title": "DE_DB-Status",
   "uid": "adxqpvr",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }
