@@ -108,7 +108,7 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 15,
+        "w": 18,
         "x": 0,
         "y": 0
       },
@@ -124,7 +124,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH last_logs AS (\n  -- Wir greifen uns nur die absolut letzten 1000 Zeilen. \n  -- Dank Index auf sent_at oder id geht das in Millisekunden.\n  SELECT * FROM request_logs \n  WHERE sent_at IS NOT NULL\n  ORDER BY sent_at DESC \n  LIMIT 1000\n)\nSELECT DISTINCT ON (bereich)\n  bereich AS \"API Key\",\n  verbraucht AS \"Verbrauchte Requests\",\n  restlich AS \"Restliche Requests\",\n  TO_TIMESTAMP(reset_timestamp) AS \"Neue Requests\"\nFROM (\n  SELECT \n    CASE \n      WHEN url LIKE '%/events%' THEN '1. Events (Producer)'\n      WHEN url LIKE '%/users/%' THEN '2. Users (Consumer)'\n      WHEN url LIKE '%/repos/%' THEN '3. Repos (Consumer)'\n      ELSE 'Andere'\n    END AS bereich,\n    (response_headers::json->>'X-RateLimit-Used')::int AS verbraucht,\n    (response_headers::json->>'X-RateLimit-Remaining')::int AS restlich,\n    (response_headers::json->>'X-RateLimit-Reset')::bigint AS reset_timestamp,\n    sent_at\n  FROM last_logs\n) sub\nWHERE bereich != 'Andere'\nORDER BY bereich, sent_at DESC;",
+          "rawSql": "WITH last_logs AS (\n  -- Wir greifen uns nur die absolut letzten 1000 Zeilen. \n  -- Dank Index auf sent_at oder id geht das in Millisekunden.\n  SELECT * FROM request_logs \n  WHERE sent_at IS NOT NULL\n  ORDER BY sent_at DESC \n  LIMIT 15000\n)\nSELECT DISTINCT ON (bereich)\n  bereich AS \"API Key\",\n  verbraucht AS \"Verbrauchte Requests\",\n  restlich AS \"Restliche Requests\",\n  TO_TIMESTAMP(reset_timestamp) AS \"Neue Requests\"\nFROM (\n  SELECT \n    CASE \n      WHEN url LIKE '%/events%' THEN '1. Events (Producer)'\n      WHEN url LIKE '%/users/%' THEN '2. Users (Consumer)'\n      WHEN url LIKE '%/repos/%' THEN '3. Repos (Consumer)'\n      ELSE 'Andere'\n    END AS bereich,\n    (response_headers::json->>'X-RateLimit-Used')::int AS verbraucht,\n    (response_headers::json->>'X-RateLimit-Remaining')::int AS restlich,\n    (response_headers::json->>'X-RateLimit-Reset')::bigint AS reset_timestamp,\n    sent_at\n  FROM last_logs\n) sub\nWHERE bereich != 'Andere'\nORDER BY bereich, sent_at DESC;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -175,7 +175,7 @@
       "gridPos": {
         "h": 4,
         "w": 6,
-        "x": 15,
+        "x": 18,
         "y": 0
       },
       "id": 6,
@@ -254,7 +254,7 @@
       "gridPos": {
         "h": 4,
         "w": 6,
-        "x": 15,
+        "x": 18,
         "y": 4
       },
       "id": 7,
@@ -390,7 +390,7 @@
             "properties": [
               {
                 "id": "custom.width",
-                "value": 155
+                "value": 191
               }
             ]
           },
@@ -410,7 +410,7 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 15,
+        "w": 18,
         "x": 0,
         "y": 6
       },
@@ -453,7 +453,7 @@
           }
         }
       ],
-      "title": "Last Failure (5min)",
+      "title": "Last rate limit hit",
       "type": "table"
     },
     {
@@ -484,7 +484,7 @@
       "gridPos": {
         "h": 4,
         "w": 6,
-        "x": 15,
+        "x": 18,
         "y": 8
       },
       "id": 10,
@@ -600,7 +600,7 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 15,
+        "w": 18,
         "x": 0,
         "y": 12
       },
@@ -703,7 +703,7 @@
       "gridPos": {
         "h": 7,
         "w": 6,
-        "x": 15,
+        "x": 18,
         "y": 12
       },
       "id": 8,
@@ -761,148 +761,6 @@
       ],
       "title": "Most common Error Codes",
       "type": "barchart"
-    },
-    {
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "github_events_db"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "footer": {
-              "reducers": []
-            },
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "url"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 553
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "status_code"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 112
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "reason"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 141
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "request_type"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 177
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "received_at"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 207
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 21,
-        "x": 0,
-        "y": 12
-      },
-      "id": 9,
-      "options": {
-        "cellHeight": "sm",
-        "showHeader": true,
-        "sortBy": []
-      },
-      "pluginVersion": "12.4.2",
-      "targets": [
-        {
-          "dataset": "github_events",
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  received_at,\n  status_code,\n  reason,\n  CASE\n    WHEN url ~ '^https://api\\.github\\.com/users/[^/]+$'       THEN 'User'\n    WHEN url ~ '^https://api\\.github\\.com/repos/[^/]+/[^/]+'  THEN 'Repo'\n    WHEN url ~ '^https://api\\.github\\.com/events(\\?.*)?$'      THEN 'Event'\n    ELSE 'Unknown'\n  END AS request_type,\n  CASE\n    WHEN url ~ '^https://api\\.github\\.com/users/[^/]+$'       THEN substring(url FROM '^https://api\\.github\\.com/users/([^/]+)$')\n    WHEN url ~ '^https://api\\.github\\.com/repos/[^/]+/[^/]+'  THEN substring(url FROM '^https://api\\.github\\.com/repos/([^/]+/[^/]+)')\n    ELSE NULL\n  END AS entity\nFROM request_logs\nWHERE NOT request_success\nORDER BY received_at DESC\nLIMIT 10;",
-          "refId": "A",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          },
-          "table": "request_logs"
-        }
-      ],
-      "title": "New panel",
-      "type": "table"
     }
   ],
   "preload": false,
@@ -920,6 +778,6 @@
   "timezone": "browser",
   "title": "DE_DB-Status",
   "uid": "adxqpvr",
-  "version": 3,
+  "version": 1,
   "weekStart": ""
 }
