@@ -67,7 +67,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.1",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "dataset": "github_events",
@@ -155,7 +155,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.4.1",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "dataset": "github_events",
@@ -271,7 +271,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.4.1",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "dataset": "github_events",
@@ -350,7 +350,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.1",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "dataset": "github_events",
@@ -428,7 +428,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.1",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "dataset": "github_events",
@@ -519,7 +519,7 @@
           {
             "config": {
               "blur": 15,
-              "radius": 5,
+              "radius": 2,
               "weight": {
                 "fixed": 1,
                 "max": 1,
@@ -543,7 +543,7 @@
           "zoom": 1
         }
       },
-      "pluginVersion": "12.4.1",
+      "pluginVersion": "12.4.2",
       "targets": [
         {
           "dataset": "github_events",
@@ -594,6 +594,6 @@
   "timezone": "browser",
   "title": "DE_DB-Overview",
   "uid": "adbk4fs",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
