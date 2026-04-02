@@ -6,10 +6,29 @@ Operational reference for the GitHub Events Streaming Stack.
 
 ## Deployment
 
-### Start all services
+### Standard deployment (recommended)
+
+Run `prod-run.sh` from the project root. It handles stopping, volume cleanup, cache-busting, and restart in one step:
 
 ```bash
-docker compose up --build
+./prod-run.sh
+```
+
+What it does:
+1. `git pull` — fetch latest code
+2. `docker compose --profile multi-consumer down` — stop running stack (data volumes preserved)
+3. `docker volume rm pm4-github-insights_grafana-data` — remove Grafana volume so provisioned dashboards reload
+4. `docker compose --profile multi-consumer build --no-cache` — rebuild all images without cache
+5. `docker compose --profile multi-consumer up -d` — start in detached mode
+
+### Manual start
+
+```bash
+# Single consumer instance
+docker compose --profile single-consumer up --build
+
+# Three partition-pinned consumer instances (higher throughput, production default)
+docker compose --profile multi-consumer up --build
 ```
 
 First start pulls images and builds the producer/consumer containers. Allow ~2–3 minutes.
@@ -19,7 +38,9 @@ First start pulls images and builds the producer/consumer containers. Allow ~2�
 Compose health checks enforce this order automatically:
 
 ```
-kafka (healthy) → kafka-init → timescaledb (healthy) → consumer
+kafka (healthy) → kafka-init → timescaledb (healthy) → consumer / consumer-0,1,2
+                                                      → geocoder
+                                                      → db-writer
                                                       → grafana
 ```
 
@@ -56,6 +77,8 @@ docker compose down -v       # stop containers AND delete all data
 | FastAPI docs | http://localhost:8000/docs | Swagger UI |
 | TimescaleDB | `docker exec timescaledb pg_isready -U github` | `accepting connections` |
 | Kafka | `docker exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list` | lists topics |
+| Geocoder | `docker logs geocoder` | periodic `Geocoded …` or `Nothing to geocode, sleeping` lines |
+| DB Writer | `docker logs db-writer` | consuming from `github.events.status` and `github.ratelimit` |
 <!-- /AUTO-GENERATED -->
 
 ---
@@ -80,9 +103,14 @@ Then restart the producer: `docker compose restart producer`
 ### Consumer lag building up in Kafka
 **Check:** Open Kafka-UI at http://localhost:8080 → select `github.events.raw` → check consumer group `github-events-enricher` lag.
 **Fix options:**
-- Check `docker logs github-consumer` for geocoding errors or DB connection issues.
-- Nominatim geocoding enforces 1 req/s — lag is normal if the event rate spikes.
-- Scale consumers: `docker compose up --scale consumer=2` (all share the same `group.id` → Kafka auto-balances).
+- Check `docker logs github-consumer` for DB connection issues or GitHub API errors.
+- Geocoding (`lat`/`lng` enrichment) runs in the dedicated `geocoder` container — it does not affect consumer throughput.
+- Switch to 3 partition-pinned instances for 3× parallel throughput:
+  ```bash
+  docker compose stop consumer
+  docker compose --profile multi-consumer up -d
+  ```
+  Each instance (`consumer-0`, `consumer-1`, `consumer-2`) owns exactly one of the 3 `github.events.raw` partitions.
 
 ### TimescaleDB compression job fails
 **Cause:** Compression is configured to kick in after 7 days. Chunks younger than 7 days cannot be compressed manually.
@@ -91,7 +119,7 @@ Then restart the producer: `docker compose restart producer`
 SELECT * FROM timescaledb_information.jobs WHERE proc_name = 'policy_compression';
 ```
 
-### `github.events.raw` topic missing
+### Kafka topic missing (`github.events.raw`, `github.events.status`, or `github.ratelimit`)
 **Fix:** Re-run the init container:
 ```bash
 docker compose run --rm kafka-init

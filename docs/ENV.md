@@ -31,7 +31,43 @@ Docker Compose reads this file automatically.
 | `DB_NAME` | Yes | `github_events` | Database name. |
 | `DB_USER` | Yes | `github` | Database user. |
 | `DB_PASSWORD` | Yes | `github_secret` | Database password. |
+| `KAFKA_MULTI_INSTANCE_ENABLED` | No | `false` | Set to `true` to enable partition-aware multi-instance mode. When enabled, each instance pins itself to a specific partition subset via `assign()` instead of `subscribe()`. |
+| `KAFKA_INSTANCE_INDEX` | Conditional | — | **Required when `KAFKA_MULTI_INSTANCE_ENABLED=true`.** 0-based index of this consumer instance (e.g. `0`, `1`, `2`). Consumer exits with a clear error if omitted when multi-instance is enabled. |
+| `KAFKA_TOTAL_INSTANCES` | No | `3` | Total number of consumer instances running in parallel. Used together with `KAFKA_INSTANCE_INDEX` to calculate the deterministic partition assignment: `partition % total == index`. |
 <!-- /AUTO-GENERATED -->
+
+---
+
+## Geocoder (`geocoder/`)
+
+<!-- AUTO-GENERATED — source: docker-compose.yml geocoder.environment -->
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DB_HOST` | Yes | `timescaledb` | TimescaleDB hostname. |
+| `DB_PORT` | No | `5432` | TimescaleDB port. |
+| `DB_NAME` | Yes | `github_events` | Database name. |
+| `DB_USER` | Yes | `github` | Database user. |
+| `DB_PASSWORD` | Yes | `github_secret` | Database password. |
+<!-- /AUTO-GENERATED -->
+
+No GitHub API key or Nominatim key is required. The geocoder calls the free OpenStreetMap Nominatim API (1 req/s rate limit enforced internally).
+
+---
+
+## DB Writer (`db-writer/`)
+
+<!-- AUTO-GENERATED — source: docker-compose.yml db-writer.environment -->
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `KAFKA_BOOTSTRAP_SERVERS` | Yes | `kafka:9092` | Kafka broker address. |
+| `DB_HOST` | Yes | `timescaledb` | TimescaleDB hostname. |
+| `DB_PORT` | No | `5432` | TimescaleDB port. |
+| `DB_NAME` | Yes | `github_events` | Database name. |
+| `DB_USER` | Yes | `github` | Database user. |
+| `DB_PASSWORD` | Yes | `github_secret` | Database password. |
+<!-- /AUTO-GENERATED -->
+
+The db-writer consumes `github.events.status` and `github.ratelimit` topics and inserts rows into `request_logs` and `rate_limit_snapshots` respectively.
 
 ---
 

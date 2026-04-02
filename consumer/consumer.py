@@ -2,12 +2,12 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 import psycopg2
 import psycopg2.extras
 import requests
-from confluent_kafka import Consumer, KafkaError
+from confluent_kafka import Consumer, KafkaError, KafkaException, Producer
 
 # ── Logging ──────────────────────────────────────────────────────
 logging.basicConfig(
@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 TOPIC_RAW = "github.events.raw"
 TOPIC_STATUS = "github.events.status"
+TOPIC_RATELIMIT = "github.ratelimit"
 GROUP_ID = "github-events-enricher"
 
 DB_DSN = (
@@ -41,27 +42,7 @@ GITHUB_HEADERS_REPO = {"Accept": "application/vnd.github+json", "User-Agent": "Z
 if GITHUB_TOKEN_REPO:
     GITHUB_HEADERS_REPO["Authorization"] = f"Bearer {GITHUB_TOKEN_REPO}"
 
-NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
-
-
-# ── Quota Tracking ──────────────────────────────────────────────
-class RateLimiter:
-    def __init__(self, max_per_hour):
-        self.max_per_hour = max_per_hour
-        self.calls = []
-
-    def can_call(self):
-        now = datetime.now()
-        self.calls = [t for t in self.calls if t > now - timedelta(hours=1)]
-        return len(self.calls) < self.max_per_hour
-
-    def record_call(self):
-        self.calls.append(datetime.now())
-
-
-user_limiter = RateLimiter(2300)
-repo_limiter = RateLimiter(2300)
-
+_kafka_producer: Producer | None = None
 
 # ── Helpers ─────────────────────────────────────────────────────
 
@@ -77,27 +58,6 @@ def db_connect():
             time.sleep(3)
 
 
-def geocode(location: str) -> dict:
-    if not location: return {}
-    try:
-        r = requests.get(NOMINATIM_URL, params={"q": location, "format": "json", "limit": 1, "addressdetails": 1},
-                         headers={"User-Agent": "ZHAW-Explorer/2.0",
-                                  "Accept-Language": "en"},
-                         timeout=5)
-        if r.status_code == 200 and r.json():
-            h = r.json()[0]
-            adr = h.get("address", {})
-            time.sleep(1)  # Nominatim policy: 1 req/s
-            return {
-                "country": adr.get("country"),
-                "country_code": (adr.get("country_code") or "").upper()[:2],
-                "lat": float(h.get("lat")), "lng": float(h.get("lon"))
-            }
-    except:
-        pass
-    return {}
-
-
 def extract_detail(event: dict) -> str:
     etype = event.get("type", "")
     p = event.get("payload", {})
@@ -110,96 +70,210 @@ def extract_detail(event: dict) -> str:
 
 # ── Enrichment ──────────────────────────────────────────────────
 
-def enrich_user(cur, conn, username):
-    # Fast path: already known as user or bot
-    cur.execute("SELECT username FROM users WHERE username = %s", (username,))
-    if cur.fetchone(): return True
-    # Fast path: already known as org
-    cur.execute("SELECT login FROM organizations WHERE login = %s", (username,))
-    if cur.fetchone(): return True
+def _delete_user_stub(cur, conn, username: str) -> None:
+    """Delete an unclaimed stub row so other consumers can retry enrichment."""
+    try:
+        cur.execute(
+            "DELETE FROM users WHERE username = %s AND fetched_at IS NULL",
+            (username,),
+        )
+        conn.commit()
+    except Exception as cleanup_err:
+        log.warning("Could not clean up stub for %s: %s", username, cleanup_err)
 
-    if not user_limiter.can_call(): return False
+
+def _delete_repo_stub(cur, conn, repo_id: int) -> None:
+    """Delete an unclaimed repo stub so other consumers can retry enrichment."""
+    try:
+        cur.execute(
+            "DELETE FROM repos WHERE repo_id = %s AND fetched_at IS NULL",
+            (repo_id,),
+        )
+        conn.commit()
+    except Exception as cleanup_err:
+        log.warning("Could not clean up repo stub for %s: %s", repo_id, cleanup_err)
+
+
+def enrich_user(cur, conn, username):
+    """Enrich a GitHub actor using the claim-before-fetch pattern.
+
+    1. Fast path: already fully enriched → return True without API call.
+    2. Claim stub via INSERT ... ON CONFLICT DO NOTHING RETURNING.
+       If no row returned, another consumer owns this username → return False.
+    3. Call GitHub API, then UPDATE the stub row with full data.
+    """
+    # Fast path: fully enriched user
+    cur.execute(
+        "SELECT username FROM users WHERE username = %s AND fetched_at IS NOT NULL",
+        (username,),
+    )
+    if cur.fetchone():
+        return True
+
+    # Fast path: fully enriched org
+    cur.execute(
+        "SELECT login FROM organizations WHERE login = %s AND fetched_at IS NOT NULL",
+        (username,),
+    )
+    if cur.fetchone():
+        return True
+
+    # Claim the slot — only one consumer wins
+    cur.execute(
+        "INSERT INTO users (username) VALUES (%s) ON CONFLICT DO NOTHING RETURNING username",
+        (username,),
+    )
+    if not cur.fetchone():
+        # Another consumer already inserted a stub or full row
+        return False
+    conn.commit()  # make stub visible to other consumers immediately
 
     try:
-        r, meta = logged_request(cur, conn, "GET", f"https://api.github.com/users/{username}", headers=GITHUB_HEADERS_USER, timeout=5)
-        user_limiter.record_call()
-        if r is None: return False
+        r, _ = logged_request(
+            cur, conn, "GET",
+            f"https://api.github.com/users/{username}",
+            headers=GITHUB_HEADERS_USER,
+            timeout=5,
+        )
+        if r is None:
+            # Network error — delete stub so another consumer can retry
+            _delete_user_stub(cur, conn, username)
+            return False
 
         if r.status_code == 404:
-            # Username unresolvable — insert stub so we don't retry on every event.
-            # `username` is used (not d['login']) because there is no response body on 404.
-            # is_bot defaults to FALSE (column is NOT NULL DEFAULT FALSE).
-            # Stubs pass the org_members guard (AND is_bot = FALSE) but lack location/repo
-            # data, so they won't distort geo or country statistics.
             log.info("Stored 404 stub for unresolvable actor: %s", username)
-            cur.execute("""
-                INSERT INTO users (username, fetched_at)
-                VALUES (%s, NOW()) ON CONFLICT DO NOTHING
-            """, (username,))
+            cur.execute(
+                "UPDATE users SET fetched_at = NOW() WHERE username = %s",
+                (username,),
+            )
             conn.commit()
             return False
 
         if r.status_code == 200:
             d = r.json()
-            actor_type = d.get("type")  # "User", "Organization", or "Bot"
+            actor_type = d.get("type")
 
             if actor_type == "User":
-                geo = geocode(d.get("location"))
                 cur.execute("""
-                    INSERT INTO users (username, fetched_at, company, location, country, country_code,
-                                       lat, lng, public_repos, followers, is_bot)
-                    VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, FALSE) ON CONFLICT DO NOTHING
-                """, (d['login'], d.get('company'), d.get('location'), geo.get('country'),
-                      geo.get('country_code'), geo.get('lat'), geo.get('lng'),
-                      d.get('public_repos'), d.get('followers')))
+                    UPDATE users
+                    SET fetched_at    = NOW(),
+                        company       = %s,
+                        location      = %s,
+                        public_repos  = %s,
+                        followers     = %s,
+                        is_bot        = FALSE
+                    WHERE username = %s
+                """, (d.get("company"), d.get("location"),
+                      d.get("public_repos"), d.get("followers"),
+                      d["login"]))
+                conn.commit()
+                return True
 
             elif actor_type == "Bot":
-                # Bots: stored in users with is_bot=TRUE, no geo/profile data
-                log.info("Stored bot actor: %s", d['login'])
-                cur.execute("""
-                    INSERT INTO users (username, fetched_at, is_bot)
-                    VALUES (%s, NOW(), %s) ON CONFLICT DO NOTHING
-                """, (d['login'], True))
+                log.info("Stored bot actor: %s", d["login"])
+                cur.execute(
+                    "UPDATE users SET fetched_at = NOW(), is_bot = %s WHERE username = %s",
+                    (True, d["login"]),
+                )
+                conn.commit()
+                return True
 
             else:
-                # Organization
+                # Organization: insert into organizations, remove stub from users
                 cur.execute("""
-                    INSERT INTO organizations (login, fetched_at, name, description, location,
-                                               public_repos, created_at)
-                    VALUES (%s, NOW(), %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING
-                """,
-                            (d['login'], d.get('name'), d.get('description'), d.get('location'),
-                             d.get('public_repos'), d.get('created_at')))
-            return True
+                    INSERT INTO organizations
+                        (login, fetched_at, name, description, location,
+                         public_repos, created_at)
+                    VALUES (%s, NOW(), %s, %s, %s, %s, %s)
+                    ON CONFLICT DO NOTHING
+                """, (d["login"], d.get("name"), d.get("description"),
+                      d.get("location"), d.get("public_repos"), d.get("created_at")))
+                # Remove the users stub for this org actor
+                cur.execute(
+                    "DELETE FROM users WHERE username = %s AND fetched_at IS NULL",
+                    (username,),
+                )
+                conn.commit()
+                return True
+
     except Exception as e:
-        log.error(f"User API Error: {e}")
+        log.error("User API Error for %s: %s", username, e)
+        _delete_user_stub(cur, conn, username)
     return False
 
 
-def enrich_repo(cur, conn, full_name):
-    cur.execute("SELECT repo_id FROM repos WHERE full_name = %s", (full_name,))
-    if cur.fetchone(): return True
-    if not repo_limiter.can_call(): return False
+def enrich_repo(cur, conn, repo_id: int, full_name: str):
+    """Enrich a repository using the claim-before-fetch pattern.
+
+    Signature change: now takes repo_id (int) as well as full_name.
+    The claim stub uses repo_id as the conflict key (PRIMARY KEY).
+    """
+    # Fast path
+    cur.execute(
+        "SELECT repo_id FROM repos WHERE repo_id = %s AND fetched_at IS NOT NULL",
+        (repo_id,),
+    )
+    if cur.fetchone():
+        return True
+
+    # Claim stub (repo_id is the PK; name/full_name/owner_login satisfy NOT NULL)
+    cur.execute(
+        """INSERT INTO repos (repo_id, name, full_name, owner_login, owner_type)
+           VALUES (%s, '', %s, '', '')
+           ON CONFLICT DO NOTHING
+           RETURNING repo_id""",
+        (repo_id, full_name),
+    )
+    if not cur.fetchone():
+        return False
+    conn.commit()
 
     try:
-        r, meta = logged_request(cur, conn, "GET", f"https://api.github.com/repos/{full_name}", headers=GITHUB_HEADERS_REPO, timeout=5)
-        repo_limiter.record_call()
-        if r is None: return False
+        r, _ = logged_request(
+            cur, conn, "GET",
+            f"https://api.github.com/repos/{full_name}",
+            headers=GITHUB_HEADERS_REPO,
+            timeout=5,
+        )
+        if r is None:
+            # Network error — delete stub so another consumer can retry
+            _delete_repo_stub(cur, conn, repo_id)
+            return False
         if r.status_code == 200:
             d = r.json()
             cur.execute("""
-                        INSERT INTO repos (repo_id, fetched_at, name, full_name, owner_login, owner_type, description,
-                                           language, license_spdx, topics, stargazers_count, forks_count, size,
-                                           created_at, pushed_at)
-                        VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING
-                        """, (d['id'], d['name'], d['full_name'], d['owner']['login'], d['owner']['type'],
-                              d.get('description'),
-                              d.get('language'), (d.get('license') or {}).get('spdx_id'), d.get('topics', []),
-                              d.get('stargazers_count'), d.get('forks_count'), d.get('size'), d.get('created_at'),
-                              d.get('pushed_at')))
+                UPDATE repos
+                SET fetched_at        = NOW(),
+                    name              = %s,
+                    full_name         = %s,
+                    owner_login       = %s,
+                    owner_type        = %s,
+                    description       = %s,
+                    language          = %s,
+                    license_spdx      = %s,
+                    topics            = %s,
+                    stargazers_count  = %s,
+                    forks_count       = %s,
+                    size              = %s,
+                    created_at        = %s,
+                    pushed_at         = %s
+                WHERE repo_id = %s
+            """, (
+                d["name"], d["full_name"],
+                d["owner"]["login"], d["owner"]["type"],
+                d.get("description"),
+                d.get("language"),
+                (d.get("license") or {}).get("spdx_id"),
+                d.get("topics", []),
+                d.get("stargazers_count"), d.get("forks_count"),
+                d.get("size"), d.get("created_at"), d.get("pushed_at"),
+                d["id"],
+            ))
+            conn.commit()
             return True
     except Exception as e:
-        log.error(f"Repo API Error: {e}")
+        log.error("Repo API Error for %s: %s", full_name, e)
+        _delete_repo_stub(cur, conn, repo_id)
     return False
 
 def _redact_headers(headers):
@@ -227,6 +301,62 @@ def _redact_headers(headers):
     return redacted
 
 
+def extract_ratelimit(headers: dict, source: str) -> dict | None:
+    """Extract GitHub rate limit fields from response headers.
+
+    Returns None if X-RateLimit-Remaining is absent (non-GitHub response).
+    """
+    remaining = headers.get("X-RateLimit-Remaining")
+    if remaining is None:
+        return None
+    reset_ts = headers.get("X-RateLimit-Reset")
+    return {
+        "source": source,
+        "resource": headers.get("X-RateLimit-Resource", "core"),
+        "limit": int(headers.get("X-RateLimit-Limit", 0)),
+        "used": int(headers.get("X-RateLimit-Used", 0)),
+        "remaining": int(remaining),
+        "reset_at": (
+            datetime.fromtimestamp(int(reset_ts), tz=timezone.utc).isoformat()
+            if reset_ts else None
+        ),
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _publish_ratelimit(headers: dict) -> None:
+    """Publish a rate limit snapshot to github.ratelimit if producer is available."""
+    if _kafka_producer is None:
+        return
+    rl = extract_ratelimit(dict(headers), "consumer")
+    if not rl:
+        return
+    try:
+        _kafka_producer.produce(
+            topic=TOPIC_RATELIMIT,
+            key=f"ratelimit-{int(time.time())}",
+            value=json.dumps(rl),
+        )
+        _kafka_producer.poll(0)
+    except Exception as e:
+        log.warning("Failed to publish rate limit snapshot: %s", e)
+
+
+def _publish_status(meta: dict) -> None:
+    """Publish HTTP request metadata to github.events.status if producer is available."""
+    if _kafka_producer is None:
+        return
+    try:
+        _kafka_producer.produce(
+            topic=TOPIC_STATUS,
+            key=f"status-{int(time.time())}",
+            value=json.dumps(meta),
+        )
+        _kafka_producer.poll(0)
+    except Exception as e:
+        log.warning("Failed to publish request status: %s", e)
+
+
 def logged_request(cur, conn, method, url, **kwargs):
     """Perform an HTTP request and log metadata directly to request_logs."""
     sent_at = datetime.now(timezone.utc)
@@ -250,7 +380,8 @@ def logged_request(cur, conn, method, url, **kwargs):
             "http_version":    r.raw.version,
             "encoding":        r.encoding,
         }
-        insert_request_meta(cur, meta)
+        _publish_ratelimit(r.headers)
+        _publish_status(meta)
         return r, meta
     except requests.RequestException as exc:
         error_meta = {
@@ -269,41 +400,84 @@ def logged_request(cur, conn, method, url, **kwargs):
             "http_version":    None,
             "encoding":        None,
         }
-        insert_request_meta(cur, error_meta)
         log.warning("GitHub API request failed: %s", exc)
         return None, error_meta
 
 
-def insert_request_meta(cur, meta: dict) -> None:
-    """Insert a request metadata record into request_logs."""
-    cur.execute("""
-        INSERT INTO request_logs (
-            request_success, sent_at, received_at, elapsed_s,
-            method, url, status_code, reason, response_bytes,
-            redirects, final_url, http_version, encoding,
-            request_headers, response_headers, error
-        ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s, %s, %s
+# ── Kafka Startup Helpers ────────────────────────────────────────
+
+def _wait_for_coordinator(consumer: Consumer, tp_list: list, max_wait_s: int = 60) -> None:
+    """Block until the Kafka group coordinator is ready.
+
+    Fetching committed offsets is the lightest operation that requires an
+    active coordinator.  Retries with exponential backoff so consumers do
+    not start processing before the coordinator is elected.
+    """
+    delay = 2.0
+    elapsed = 0.0
+    while elapsed < max_wait_s:
+        try:
+            consumer.committed(tp_list, timeout=5)
+            log.info("Group coordinator is ready")
+            return
+        except KafkaException as e:
+            log.warning("Group coordinator not ready (%s), retrying in %.0fs…", e, delay)
+        except Exception as e:
+            log.warning("Coordinator check error (%s), retrying in %.0fs…", e, delay)
+        time.sleep(delay)
+        elapsed += delay
+        delay = min(delay * 2, 15.0)
+    log.warning("Coordinator readiness check timed out after %.0fs — proceeding", max_wait_s)
+
+
+# ── Multi-Instance Partition Config ─────────────────────────────
+
+def get_multi_instance_config():
+    """Parse multi-instance env vars.
+
+    Returns:
+        (enabled: bool, instance_index: int|None, total_instances: int|None)
+
+    Raises:
+        SystemExit: if enabled but KAFKA_INSTANCE_INDEX is missing.
+    """
+    enabled = os.getenv("KAFKA_MULTI_INSTANCE_ENABLED", "false").lower() == "true"
+    if not enabled:
+        return False, None, None
+
+    index_str = os.getenv("KAFKA_INSTANCE_INDEX")
+    if index_str is None:
+        raise SystemExit(
+            "KAFKA_MULTI_INSTANCE_ENABLED=true but KAFKA_INSTANCE_INDEX is not set. "
+            "Set KAFKA_INSTANCE_INDEX to 0, 1, or 2 (or up to KAFKA_TOTAL_INSTANCES-1)."
         )
-    """, (
-        meta.get("request_success"),
-        meta.get("sent_at"),
-        meta.get("received_at"),
-        meta.get("elapsed_s"),
-        meta.get("method"),
-        meta.get("url"),
-        meta.get("status_code"),
-        meta.get("reason"),
-        meta.get("response_bytes"),
-        meta.get("redirects"),
-        meta.get("final_url"),
-        meta.get("http_version"),
-        meta.get("encoding"),
-        psycopg2.extras.Json(_redact_headers(meta.get("request_headers"))),
-        psycopg2.extras.Json(_redact_headers(meta.get("response_headers"))),
-        meta.get("error"),
-    ))
+
+    total_instances = int(os.getenv("KAFKA_TOTAL_INSTANCES", "3"))
+    return True, int(index_str), total_instances
+
+
+def calculate_assigned_partitions(
+    instance_index: int,
+    total_instances: int,
+    topic_partitions: list,
+) -> list:
+    """Deterministically assign partitions to this instance.
+
+    Formula: assigned = [p for p in topic_partitions if p % total_instances == instance_index]
+
+    Args:
+        instance_index:   0-based index of this consumer instance.
+        total_instances:  total number of consumer instances.
+        topic_partitions: list of actual partition IDs for the topic.
+    """
+    if total_instances > len(topic_partitions):
+        log.warning(
+            "KAFKA_TOTAL_INSTANCES (%d) > actual partitions (%d); "
+            "some instances will receive no partitions.",
+            total_instances, len(topic_partitions),
+        )
+    return [p for p in topic_partitions if p % total_instances == instance_index]
+
 
 # ── Main ────────────────────────────────────────────────────────
 
@@ -317,55 +491,109 @@ def _is_non_bot_user(cur, username: str) -> bool:
 
 
 def main():
+    global _kafka_producer
+    _kafka_producer = Producer({
+        "bootstrap.servers": BOOTSTRAP_SERVERS,
+        "acks": "1",
+        "linger.ms": 100,
+    })
+    log.info("Kafka producer initialized for rate limit publishing")
     log.info("Starting GitHub Events Consumer (Star Schema Mode)")
 
     # 1. Kafka Consumer Initialisierung
+    multi_enabled, instance_index, total_instances = get_multi_instance_config()
+
+    # Each instance needs a unique group ID when using assign().
+    # Sharing a group ID across assign()-based consumers bypasses Kafka's rebalance
+    # protocol while still registering with the group coordinator, which causes
+    # NOT_COORDINATOR errors. Per-instance group IDs give each consumer its own
+    # independent offset tracking for its pinned partition.
+    effective_group_id = f"{GROUP_ID}-p{instance_index}" if multi_enabled else GROUP_ID
+
     consumer = Consumer({
         "bootstrap.servers": BOOTSTRAP_SERVERS,
-        "group.id": GROUP_ID,
+        "group.id": effective_group_id,
         "auto.offset.reset": "earliest",
         "enable.auto.commit": False
     })
-    consumer.subscribe([TOPIC_RAW, TOPIC_STATUS])
+
+    tp_list = []  # populated in multi-instance mode; kept in scope for reconnect loop
+    if multi_enabled:
+        # Query actual partition count from broker metadata, then pin to our slice.
+        # Retry until the topic exists — kafka-init may not have run yet.
+        from confluent_kafka import TopicPartition
+        actual_partitions = []
+        for attempt in range(10):
+            metadata = consumer.list_topics(TOPIC_RAW, timeout=10)
+            actual_partitions = sorted(metadata.topics[TOPIC_RAW].partitions.keys())
+            if actual_partitions:
+                break
+            log.warning("Topic %s has no partitions yet, retrying in 3s (%d/10)…", TOPIC_RAW, attempt + 1)
+            time.sleep(3)
+        if not actual_partitions:
+            raise SystemExit(f"Topic {TOPIC_RAW} has no partitions after retries — is kafka-init running?")
+        assigned = calculate_assigned_partitions(instance_index, total_instances, actual_partitions)
+        tp_list = [TopicPartition(TOPIC_RAW, p) for p in assigned]
+        consumer.assign(tp_list)
+        log.info(
+            "Multi-instance mode: instance %d/%d, assigned partitions %s on topic %s",
+            instance_index, total_instances, assigned, TOPIC_RAW,
+        )
+        _wait_for_coordinator(consumer, tp_list)
+    else:
+        consumer.subscribe([TOPIC_RAW])
+        _wait_for_coordinator(consumer, [])
 
     # 2. Datenbank-Verbindung (mit Retry-Logik)
     conn = db_connect()
     cur = conn.cursor()
 
+    _coord_backoff = 1.0  # exponential backoff for NOT_COORDINATOR errors
+
     try:
         while True:
-            # Batch-poll: drain all available messages, process STATUS first
+            # Batch-poll: drain all available messages
             batch = consumer.consume(num_messages=100, timeout=1.0)
             if not batch:
                 continue
 
-            # Separate STATUS from RAW so status/request_logs are never blocked by slow enrichment
-            status_msgs = []
             raw_msgs = []
+            coord_error_seen = False
             for m in batch:
                 if m.error():
-                    log.error(f"Kafka error: {m.error()}")
+                    err = m.error()
+                    if err.code() == KafkaError.NOT_COORDINATOR:
+                        coord_error_seen = True
+                        log.warning(
+                            "Group coordinator not ready (transient), backing off %.1fs…",
+                            _coord_backoff,
+                        )
+                    else:
+                        log.error("Kafka error: %s", err)
                     continue
-                if m.topic() == TOPIC_STATUS:
-                    status_msgs.append(m)
+                raw_msgs.append(m)
+
+            if coord_error_seen:
+                time.sleep(_coord_backoff)
+                _coord_backoff = min(_coord_backoff * 2, 30.0)
+                # Sleeping alone is not enough: librdkafka's internal group-membership
+                # state is broken after NOT_COORDINATOR.  Subsequent consume() calls
+                # return empty batches indefinitely without logging anything.
+                # Force a full group re-join by tearing down and rebuilding the
+                # partition assignment / subscription.
+                log.info("Forcing Kafka group re-join after NOT_COORDINATOR…")
+                if multi_enabled:
+                    consumer.unassign()
+                    _wait_for_coordinator(consumer, tp_list)
+                    consumer.assign(tp_list)
                 else:
-                    raw_msgs.append(m)
+                    consumer.unsubscribe()
+                    _wait_for_coordinator(consumer, [])
+                    consumer.subscribe([TOPIC_RAW])
+            elif raw_msgs:
+                _coord_backoff = 1.0  # reset on successful messages
 
-            # Process all STATUS messages first (fast inserts)
-            for m in status_msgs:
-                try:
-                    meta = json.loads(m.value().decode("utf-8"))
-                    insert_request_meta(cur, meta)
-                    conn.commit()
-                    consumer.commit(message=m, asynchronous=False)
-                except Exception as e:
-                    conn.rollback()
-                    log.error(f"Status Processing Error: {e}")
-                    if "connection" in str(e).lower():
-                        conn = db_connect()
-                        cur = conn.cursor()
-
-            # Then process RAW events
+            # Process RAW events
             for msg in raw_msgs:
                 try:
                     event = json.loads(msg.value().decode("utf-8"))
@@ -378,7 +606,7 @@ def main():
 
                     # --- STUFE 1: Stammdaten-Anreicherung (Enrichment) ---
                     enrich_user(cur, conn, actor)
-                    enrich_repo(cur, conn, repo_name)
+                    enrich_repo(cur, conn, repo_id, repo_name)
 
                     # --- STUFE 2: Relationen-Learning (Membership) ---
                     cur.execute("SELECT owner_login, owner_type FROM repos WHERE repo_id = %s", (repo_id,))

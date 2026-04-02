@@ -74,6 +74,7 @@ services:
       echo '--- Creating Kafka topics ---'
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic github.events.raw --partitions 3 --replication-factor 1
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic github.events.status --partitions 3 --replication-factor 1
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic github.ratelimit --partitions 3 --replication-factor 1
 
       echo '--- Topics ready ---'
       "
@@ -88,7 +89,9 @@ services:
       - "5432:5432"
     volumes:
       - timescale-data:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ./db/migrations/001_add_is_bot_to_users.sql:/docker-entrypoint-initdb.d/02_migration_001.sql:ro
+      - ./db/migrations/002_geocoder_and_ratelimit.sql:/docker-entrypoint-initdb.d/03_migration_002.sql:ro
     environment:
       POSTGRES_DB:       github_events
       POSTGRES_USER:     github
@@ -115,11 +118,12 @@ services:
       MAX_PAGES:               "3"
     restart: unless-stopped
 
-  # ── Consumer / Enricher ────────────────────────────────────────
+  # ── Consumer / Enricher (single-instance, default) ────────────
   consumer:
     build: ./consumer
     pull_policy: build
     container_name: github-consumer
+    profiles: [single-consumer]
     networks: [github-stream]
     depends_on:
       kafka:
@@ -130,6 +134,121 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       GITHUB_TOKEN_USER:       ${GITHUB_TOKEN_USER:-}
       GITHUB_TOKEN_REPO:       ${GITHUB_TOKEN_REPO:-}
+      DB_HOST:                 timescaledb
+      DB_PORT:                 "5432"
+      DB_NAME:                 github_events
+      DB_USER:                 github
+      DB_PASSWORD:             github_secret
+    restart: unless-stopped
+
+  # ── Consumer instances 0-2 (multi-instance mode, opt-in) ──────
+  # Usage: docker compose --profile multi-consumer up -d
+  # Disables the single-instance `consumer` service and runs 3 pinned instances.
+  consumer-0:
+    build: ./consumer
+    pull_policy: build
+    container_name: github-consumer-0
+    profiles: [multi-consumer]
+    networks: [github-stream]
+    depends_on:
+      kafka:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS:    kafka:9092
+      GITHUB_TOKEN_USER:          ${GITHUB_TOKEN_USER:-}
+      GITHUB_TOKEN_REPO:          ${GITHUB_TOKEN_REPO:-}
+      DB_HOST:                    timescaledb
+      DB_PORT:                    "5432"
+      DB_NAME:                    github_events
+      DB_USER:                    github
+      DB_PASSWORD:                github_secret
+      KAFKA_MULTI_INSTANCE_ENABLED: "true"
+      KAFKA_INSTANCE_INDEX:       "0"
+      KAFKA_TOTAL_INSTANCES:      "3"
+    restart: unless-stopped
+
+  consumer-1:
+    build: ./consumer
+    pull_policy: build
+    container_name: github-consumer-1
+    profiles: [multi-consumer]
+    networks: [github-stream]
+    depends_on:
+      kafka:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS:    kafka:9092
+      GITHUB_TOKEN_USER:          ${GITHUB_TOKEN_USER:-}
+      GITHUB_TOKEN_REPO:          ${GITHUB_TOKEN_REPO:-}
+      DB_HOST:                    timescaledb
+      DB_PORT:                    "5432"
+      DB_NAME:                    github_events
+      DB_USER:                    github
+      DB_PASSWORD:                github_secret
+      KAFKA_MULTI_INSTANCE_ENABLED: "true"
+      KAFKA_INSTANCE_INDEX:       "1"
+      KAFKA_TOTAL_INSTANCES:      "3"
+    restart: unless-stopped
+
+  consumer-2:
+    build: ./consumer
+    pull_policy: build
+    container_name: github-consumer-2
+    profiles: [multi-consumer]
+    networks: [github-stream]
+    depends_on:
+      kafka:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS:    kafka:9092
+      GITHUB_TOKEN_USER:          ${GITHUB_TOKEN_USER:-}
+      GITHUB_TOKEN_REPO:          ${GITHUB_TOKEN_REPO:-}
+      DB_HOST:                    timescaledb
+      DB_PORT:                    "5432"
+      DB_NAME:                    github_events
+      DB_USER:                    github
+      DB_PASSWORD:                github_secret
+      KAFKA_MULTI_INSTANCE_ENABLED: "true"
+      KAFKA_INSTANCE_INDEX:       "2"
+      KAFKA_TOTAL_INSTANCES:      "3"
+    restart: unless-stopped
+
+  # ── Geocoder ───────────────────────────────────────────────────
+  geocoder:
+    build: ./geocoder
+    pull_policy: build
+    container_name: geocoder
+    networks: [github-stream]
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment:
+      DB_HOST:     timescaledb
+      DB_PORT:     "5432"
+      DB_NAME:     github_events
+      DB_USER:     github
+      DB_PASSWORD: github_secret
+    restart: unless-stopped
+
+  # ── DB Writer (status + ratelimit topics) ─────────────────────
+  db-writer:
+    build: ./db-writer
+    pull_policy: build
+    container_name: db-writer
+    networks: [github-stream]
+    depends_on:
+      kafka:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       DB_HOST:                 timescaledb
       DB_PORT:                 "5432"
       DB_NAME:                 github_events

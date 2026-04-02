@@ -761,6 +761,148 @@
       ],
       "title": "Most common Error Codes",
       "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "github_events_db"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "url"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 553
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status_code"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 112
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "reason"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 141
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "request_type"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 177
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "received_at"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 207
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 21,
+        "x": 0,
+        "y": 12
+      },
+      "id": 9,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "github_events",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  received_at,\n  status_code,\n  reason,\n  CASE\n    WHEN url ~ '^https://api\\.github\\.com/users/[^/]+$'       THEN 'User'\n    WHEN url ~ '^https://api\\.github\\.com/repos/[^/]+/[^/]+'  THEN 'Repo'\n    WHEN url ~ '^https://api\\.github\\.com/events(\\?.*)?$'      THEN 'Event'\n    ELSE 'Unknown'\n  END AS request_type,\n  CASE\n    WHEN url ~ '^https://api\\.github\\.com/users/[^/]+$'       THEN substring(url FROM '^https://api\\.github\\.com/users/([^/]+)$')\n    WHEN url ~ '^https://api\\.github\\.com/repos/[^/]+/[^/]+'  THEN substring(url FROM '^https://api\\.github\\.com/repos/([^/]+/[^/]+)')\n    ELSE NULL\n  END AS entity\nFROM request_logs\nWHERE NOT request_success\nORDER BY received_at DESC\nLIMIT 10;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          },
+          "table": "request_logs"
+        }
+      ],
+      "title": "New panel",
+      "type": "table"
     }
   ],
   "preload": false,

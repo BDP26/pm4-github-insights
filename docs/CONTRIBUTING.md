@@ -13,11 +13,25 @@
 
 ## Running the full stack
 
+The recommended way to (re)start the production stack is `prod-run.sh` from the project root:
+
 ```bash
-docker compose up --build
+./prod-run.sh
 ```
 
-This starts: Kafka (KRaft), Kafka-UI, TimescaleDB, producer, consumer, Grafana.
+This script: pulls latest code, stops any running stack (data volumes preserved), removes the Grafana volume so dashboards always reload from provisioning, rebuilds all images with `--no-cache`, and starts the `multi-consumer` profile in detached mode.
+
+For manual control:
+
+```bash
+# Single consumer instance
+docker compose --profile single-consumer up --build
+
+# Three partition-pinned consumer instances (higher throughput)
+docker compose --profile multi-consumer up --build
+```
+
+See [docs/RUNBOOK.md](RUNBOOK.md) for details on multi-instance mode and deployment procedures.
 
 The FastAPI service and Next.js frontend have individual Dockerfiles (`api/` and `frontend/`) and can be added to the compose file or run standalone (see below).
 
@@ -64,6 +78,44 @@ docker compose up timescaledb
 
 ---
 
+## Running tests
+
+### Unit tests
+
+Cover consumer enrichment, partition assignment, geocoder claim logic, db-writer message routing, and producer/consumer rate-limit helpers. No running infrastructure required — all external calls are mocked.
+
+```bash
+# From the project root
+pip install pytest
+python -m pytest tests/ -v
+```
+
+Key test files:
+
+| File | What it covers |
+|---|---|
+| `tests/test_enrich_user.py` | `enrich_user` claim-before-fetch pattern, all GitHub actor types |
+| `tests/test_enrich_repo.py` | `enrich_repo` claim-before-fetch pattern |
+| `tests/test_geocoder.py` | Geocoder claim SQL, Nominatim response parsing |
+| `tests/test_db_writer.py` | DB-writer routing of status and ratelimit messages |
+| `tests/test_ratelimit.py` | `extract_ratelimit` helper, `_publish_ratelimit` |
+| `tests/test_producer_ratelimit.py` | Producer `extract_ratelimit` helper |
+| `tests/test_partition_config.py` | Multi-instance partition assignment logic |
+
+### Integration tests
+
+Spin up a real Kafka + TimescaleDB stack and verify that 3 partition-pinned consumer instances start correctly, consume all events exactly once, and produce no `NOT_COORDINATOR` errors.
+
+```bash
+# Requires: Docker, confluent-kafka Python package
+pip install confluent-kafka pytest
+python -m pytest tests/integration/test_multi_consumer.py -v -s
+```
+
+The integration test uses non-conflicting ports (Kafka: 19094, TimescaleDB: 15432) so it can run alongside the production stack. It starts and tears down its own isolated Docker Compose stack automatically. Allow ~2 minutes.
+
+---
+
 ## Code style
 
 - **TypeScript:** strict mode enabled (`tsconfig.json`). Zero type errors expected — `npm run build` must pass clean.
@@ -76,6 +128,9 @@ docker compose up timescaledb
 
 - [ ] `npm run build` passes with zero errors (frontend)
 - [ ] `docker build -t test-api ./api` succeeds (API)
-- [ ] `docker compose up --build` starts without errors
+- [ ] `docker compose build` succeeds (all services: consumer, producer, geocoder, db-writer)
+- [ ] `docker compose --profile single-consumer up --build` starts without errors
+- [ ] `python -m pytest tests/ -v` passes (unit tests, 47+ tests, no infrastructure needed)
+- [ ] `python -m pytest tests/integration/ -v -s` passes (consumer integration tests, requires Docker)
 - [ ] New environment variables are documented in `docs/ENV.md`
 - [ ] Any new API endpoints are listed in the root `README.md`

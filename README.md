@@ -29,10 +29,13 @@ GitHub API
                ▼
 ┌─────────────────────────────────────┐
 │  Consumer  (consumer/consumer.py)   │
-│  • Fetches GitHub user profiles     │
-│  • Geocodes location strings        │
-│    (Nominatim, 1 req/s, cached)     │
+│  • Fetches GitHub user/repo data    │
 │  • Writes enriched rows to DB       │
+│  • Background thread: geocodes      │
+│    location strings (Nominatim,     │
+│    1 req/s) without blocking Kafka  │
+│  • Supports 1 or 3 instances        │
+│    (partition-pinned via assign())  │
 └──────────────┬──────────────────────┘
                │
                ▼
@@ -162,22 +165,27 @@ cd pm4-github-insights
 cp .env.example .env
 ```
 
-Open `.env` and optionally add a GitHub token (strongly recommended — increases rate limit from 60 to 5 000 req/h):
+Open `.env` and optionally add GitHub tokens (strongly recommended — increases rate limit from 60 to 5 000 req/h):
 
 ```dotenv
-GITHUB_TOKEN=ghp_your_token_here   # optional but recommended
-POLL_INTERVAL_SECONDS=10            # how often to poll the GitHub API
-MAX_PAGES=3                         # pages per poll (30 events/page)
+GITHUB_TOKEN_EVENTS=ghp_your_token_here   # producer: poll public events API
+GITHUB_TOKEN_USER=ghp_your_token_here     # consumer: fetch user profiles
+GITHUB_TOKEN_REPO=ghp_your_token_here     # consumer: fetch repo metadata
 ```
 
 ### 3. Build and start all services
 
 ```bash
-docker compose up --build
+docker compose --profile single-consumer up --build
 ```
 
 First start takes a few minutes while images are pulled and built.
 Kafka topic creation and DB schema initialisation happen automatically.
+
+> **Multi-instance mode** — to run 3 partition-pinned consumer instances in parallel (useful when consumer lag is building up):
+> ```bash
+> docker compose --profile multi-consumer up --build
+> ```
 
 ### 4. Open the UIs
 
@@ -205,13 +213,13 @@ Rebuild only the affected container — infrastructure stays up, data is preserv
 
 ```bash
 # Consumer changed (consumer/consumer.py or consumer/Dockerfile)
-docker compose up -d --build consumer
+docker compose --profile single-consumer up -d --build consumer
 
 # Producer changed (producer/producer.py or producer/Dockerfile)
 docker compose up -d --build producer
 
 # Both changed
-docker compose up -d --build consumer producer
+docker compose --profile single-consumer up -d --build consumer producer
 ```
 
 ### After changing Grafana dashboards / provisioning
@@ -227,8 +235,8 @@ docker compose restart grafana
 `init.sql` only runs when the DB volume is created for the first time. To apply changes to a **running** DB, write a migration script instead (see below). To apply to a **fresh** DB:
 
 ```bash
-docker compose down -v          # deletes all data
-docker compose up --build       # re-creates DB with new schema
+docker compose down -v                                    # deletes all data
+docker compose --profile single-consumer up --build       # re-creates DB with new schema
 ```
 
 ### Applying a DB migration to a running stack
@@ -245,12 +253,12 @@ Verify the migration ran cleanly — look for `ALTER TABLE`, `CREATE ...` lines 
 ### Full teardown and rebuild (e.g. after infra changes)
 
 ```bash
-docker compose down             # keep volumes (preserves DB data)
-docker compose up --build       # rebuild all images
+docker compose down                                        # keep volumes (preserves DB data)
+docker compose --profile single-consumer up --build        # rebuild all images
 
 # OR — start completely fresh (deletes all data)
 docker compose down -v
-docker compose up --build
+docker compose --profile single-consumer up --build
 ```
 
 ### Viewing logs
@@ -361,7 +369,7 @@ SELECT username, fetched_at FROM users WHERE is_bot = TRUE ORDER BY fetched_at D
 | Need | Solution |
 |---|---|
 | More throughput | Add Kafka broker nodes, increase partitions |
-| Faster enrichment | Run multiple consumer containers (same group.id = auto-balanced) |
+| Faster enrichment | Run 3 partition-pinned consumer instances: `docker compose --profile multi-consumer up -d` |
 | Stream processing | Add Apache Flink or Spark Structured Streaming consuming from Kafka |
 | Long-term archival | Add a Kafka connector to dump to S3/GCS (Parquet) |
 | Alerts | Use Grafana alerting rules on the continuous aggregates |
