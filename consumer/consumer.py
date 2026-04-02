@@ -43,6 +43,8 @@ if GITHUB_TOKEN_REPO:
     GITHUB_HEADERS_REPO["Authorization"] = f"Bearer {GITHUB_TOKEN_REPO}"
 
 _kafka_producer: Producer | None = None
+_ratelimit_reset_user: float = 0  # UTC timestamp when user token rate limit resets
+_ratelimit_reset_repo: float = 0  # UTC timestamp when repo token rate limit resets
 
 # ── Helpers ─────────────────────────────────────────────────────
 
@@ -102,6 +104,9 @@ def enrich_user(cur, conn, username):
        If no row returned, another consumer owns this username → return False.
     3. Call GitHub API, then UPDATE the stub row with full data.
     """
+    # Skip if rate-limited
+    if _ratelimit_reset_user > datetime.now(timezone.utc).timestamp():
+        return False
     # Fast path: fully enriched user
     cur.execute(
         "SELECT username FROM users WHERE username = %s AND fetched_at IS NOT NULL",
@@ -196,6 +201,11 @@ def enrich_user(cur, conn, username):
                 conn.commit()
                 return True
 
+        else:
+            log.warning("User API %s returned %s for %s", r.status_code, r.reason, username)
+            _delete_user_stub(cur, conn, username)
+            return False
+
     except Exception as e:
         log.error("User API Error for %s: %s", username, e)
         _delete_user_stub(cur, conn, username)
@@ -208,6 +218,9 @@ def enrich_repo(cur, conn, repo_id: int, full_name: str):
     Signature change: now takes repo_id (int) as well as full_name.
     The claim stub uses repo_id as the conflict key (PRIMARY KEY).
     """
+    # Skip if rate-limited
+    if _ratelimit_reset_repo > datetime.now(timezone.utc).timestamp():
+        return False
     # Fast path
     cur.execute(
         "SELECT repo_id FROM repos WHERE repo_id = %s AND fetched_at IS NOT NULL",
@@ -254,6 +267,14 @@ def enrich_repo(cur, conn, repo_id: int, full_name: str):
                     topics            = %s,
                     stargazers_count  = %s,
                     forks_count       = %s,
+                    watchers_count    = %s,
+                    has_issues        = %s,
+                    open_issues_count = %s,
+                    has_projects      = %s,
+                    has_downloads     = %s,
+                    archived          = %s,
+                    disabled          = %s,
+                    homepage          = %s,
                     size              = %s,
                     created_at        = %s,
                     pushed_at         = %s
@@ -265,12 +286,19 @@ def enrich_repo(cur, conn, repo_id: int, full_name: str):
                 d.get("language"),
                 (d.get("license") or {}).get("spdx_id"),
                 d.get("topics", []),
-                d.get("stargazers_count"), d.get("forks_count"),
+                d.get("stargazers_count"), d.get("forks_count"),d.get("watchers_count"),
+                d.get("has_issues"), d.get("open_issues_count"),
+                d.get("has_projects"), d.get("has_downloads"),d.get("archived"), d.get("disabled"),
+                d.get("homepage"),
                 d.get("size"), d.get("created_at"), d.get("pushed_at"),
                 d["id"],
             ))
             conn.commit()
             return True
+        else:
+            log.warning("Repo API %s returned %s for %s", r.status_code, r.reason, full_name)
+            _delete_repo_stub(cur, conn, repo_id)
+            return False
     except Exception as e:
         log.error("Repo API Error for %s: %s", full_name, e)
         _delete_repo_stub(cur, conn, repo_id)
@@ -382,6 +410,20 @@ def logged_request(cur, conn, method, url, **kwargs):
         }
         _publish_ratelimit(r.headers)
         _publish_status(meta)
+
+        # Track rate-limit reset timestamps (no blocking sleep)
+        if r.status_code in (403, 429):
+            reset_ts = r.headers.get("X-RateLimit-Reset")
+            if reset_ts:
+                global _ratelimit_reset_user, _ratelimit_reset_repo
+                reset_at = int(reset_ts)
+                if "/users/" in url:
+                    _ratelimit_reset_user = reset_at
+                else:
+                    _ratelimit_reset_repo = reset_at
+                log.warning("Rate-limited (%s). Skipping enrichment until reset at %s.",
+                            r.status_code, datetime.fromtimestamp(reset_at, tz=timezone.utc).isoformat())
+
         return r, meta
     except requests.RequestException as exc:
         error_meta = {
@@ -604,26 +646,7 @@ def main():
                     if not actor or not repo_id:
                         continue
 
-                    # --- STUFE 1: Stammdaten-Anreicherung (Enrichment) ---
-                    enrich_user(cur, conn, actor)
-                    enrich_repo(cur, conn, repo_id, repo_name)
-
-                    # --- STUFE 2: Relationen-Learning (Membership) ---
-                    cur.execute("SELECT owner_login, owner_type FROM repos WHERE repo_id = %s", (repo_id,))
-                    res = cur.fetchone()
-
-                    if res:
-                        owner_login, owner_type = res
-
-                        if owner_type == 'Organization':
-                            enrich_user(cur, conn, owner_login)
-                            if _is_non_bot_user(cur, actor):
-                                cur.execute("""
-                                    INSERT INTO organization_members (org_login, user_username, role)
-                                    VALUES (%s, %s, 'contributor') ON CONFLICT DO NOTHING
-                                """, (owner_login, actor))
-
-                    # --- STUFE 3: Event Fact-Table befüllen ---
+                    # --- STUFE 1: Event Fact-Table befüllen (immer zuerst) ---
                     ts_str = event.get("created_at", datetime.now(timezone.utc).isoformat())
                     ts = datetime.strptime(ts_str.replace("Z", "+00:00"), "%Y-%m-%dT%H:%M:%S%z")
 
@@ -642,6 +665,27 @@ def main():
 
                     conn.commit()
                     consumer.commit(message=msg, asynchronous=False)
+
+                    # --- STUFE 2: Stammdaten-Anreicherung (Enrichment) ---
+                    enrich_user(cur, conn, actor)
+                    enrich_repo(cur, conn, repo_id, repo_name)
+
+                    # --- STUFE 3: Relationen-Learning (Membership) ---
+                    cur.execute("SELECT owner_login, owner_type FROM repos WHERE repo_id = %s", (repo_id,))
+                    res = cur.fetchone()
+
+                    if res:
+                        owner_login, owner_type = res
+
+                        if owner_type == 'Organization':
+                            enrich_user(cur, conn, owner_login)
+                            cur.execute("SELECT 1 FROM organizations WHERE login = %s", (owner_login,))
+                            if cur.fetchone() and _is_non_bot_user(cur, actor):
+                                cur.execute("""
+                                    INSERT INTO organization_members (org_login, user_username, role)
+                                    VALUES (%s, %s, 'contributor') ON CONFLICT DO NOTHING
+                                """, (owner_login, actor))
+                                conn.commit()
 
                 except Exception as e:
                     conn.rollback()
