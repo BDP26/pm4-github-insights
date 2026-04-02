@@ -669,7 +669,10 @@ class Enricher:
             )
             self._repo_pool.update_from_response(token_id, r)
             if r is None or not r.ok:
-                log.warning("GraphQL repo batch failed; deleting %d stubs", len(batch))
+                if r is not None:
+                    log.warning("GraphQL repo batch failed with response %s; deleting %d stubs", r.json(), len(batch))
+                else:
+                    log.warning("GraphQL repo batch request failed; deleting %d stubs", len(batch))
                 for repo_id, _ in batch:
                     _delete_repo_stub(self._cur, self._conn, repo_id)
                 return
