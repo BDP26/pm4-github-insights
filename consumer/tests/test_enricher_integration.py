@@ -207,3 +207,41 @@ def test_backward_compat_single_token():
 
     assert len(resp_lib.calls) == 1
     assert "single_tok" in resp_lib.calls[0].request.headers.get("Authorization", "")
+
+
+@resp_lib.activate
+def test_graphql_500_deletes_stubs():
+    cur = MagicMock()
+    conn = MagicMock()
+    cur.fetchone.side_effect = [None, None, ("alice",)]
+
+    resp_lib.add(
+        resp_lib.POST, GRAPHQL_ENDPOINT,
+        json={"message": "Internal Server Error"},
+        status=500,
+        headers={"X-RateLimit-Remaining": "5000", "X-RateLimit-Reset": str(int(time.time()) + 3600)},
+    )
+
+    enricher = Enricher(["tok_a"], [], conn, cur, None)
+    enricher.add_user("alice")
+    enricher.flush(force=True)
+
+    # Verify DELETE FROM users was called (stub cleanup)
+    calls = [c[0][0] for c in cur.execute.call_args_list]
+    assert any("DELETE FROM users" in sql for sql in calls)
+
+
+@resp_lib.activate
+def test_flush_without_force_respects_interval():
+    """flush() without force=True should not trigger HTTP call before interval elapses."""
+    cur = MagicMock()
+    conn = MagicMock()
+    cur.fetchone.side_effect = [None, None, ("alice",)]
+
+    enricher = Enricher(["tok_a"], [], conn, cur, None)
+    enricher.add_user("alice")
+    # Call flush() without force — interval hasn't elapsed yet
+    enricher.flush(force=False)
+
+    # No HTTP calls should have been made
+    assert len(resp_lib.calls) == 0

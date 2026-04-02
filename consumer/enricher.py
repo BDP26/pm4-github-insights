@@ -2,6 +2,7 @@
 # NOTE: json, time, requests used by GraphQL/REST functions added in later tasks
 import json
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -496,7 +497,6 @@ def _rest_fallback_repo(cur, conn, repo_id: int, full_name: str, pool: "TokenPoo
 
 def parse_token_pool(list_env: str, fallback_env: str) -> list[str]:
     """Parse comma-separated token pool env var, falling back to single-token var."""
-    import os
     val = os.getenv(list_env, "").strip()
     if val:
         return [t.strip() for t in val.split(",") if t.strip()]
@@ -605,74 +605,88 @@ class Enricher:
     # ── Flush Logic ──────────────────────────────────────────────
 
     def _flush_users(self) -> None:
-        batch = self._pending_users[:GRAPHQL_BATCH_SIZE]
-        self._pending_users = self._pending_users[GRAPHQL_BATCH_SIZE:]
-        token, token_id = self._user_pool.next_token()
-        if token is None:
-            log.warning("All user tokens rate-limited; deleting %d stubs", len(batch))
-            for username in batch:
-                _delete_user_stub(self._cur, self._conn, username)
-            return
-        r, _ = logged_request(
-            self._cur, self._conn, "POST", GRAPHQL_ENDPOINT,
-            headers=_auth_headers(token),
-            json={"query": build_user_query(batch)},
-            token_id=token_id,
-            request_type="graphql",
-            batch_size=len(batch),
-            kafka_producer=self._producer,
-            timeout=10,
-        )
-        self._user_pool.update_from_response(token_id, r)
-        if r is None or not r.ok:
-            log.warning("GraphQL user batch failed; deleting %d stubs", len(batch))
-            for username in batch:
-                _delete_user_stub(self._cur, self._conn, username)
-            return
-        data = r.json().get("data", {})
-        for i, username in enumerate(batch):
-            node = data.get(f"u{i}")
-            if node:
-                _write_user(self._cur, self._conn, username, node)
-            else:
-                log.info("GraphQL null for user %s; falling back to REST", username)
-                _rest_fallback_user(
-                    self._cur, self._conn, username, self._user_pool, self._producer
-                )
+        while self._pending_users:
+            batch = self._pending_users[:GRAPHQL_BATCH_SIZE]
+            self._pending_users = self._pending_users[GRAPHQL_BATCH_SIZE:]
+            token, token_id = self._user_pool.next_token()
+            if token is None:
+                log.warning("All user tokens rate-limited; deleting %d stubs", len(batch))
+                for username in batch:
+                    _delete_user_stub(self._cur, self._conn, username)
+                return
+            r, _ = logged_request(
+                self._cur, self._conn, "POST", GRAPHQL_ENDPOINT,
+                headers=_auth_headers(token),
+                json={"query": build_user_query(batch)},
+                token_id=token_id,
+                request_type="graphql",
+                batch_size=len(batch),
+                kafka_producer=self._producer,
+                timeout=10,
+            )
+            self._user_pool.update_from_response(token_id, r)
+            if r is None or not r.ok:
+                log.warning("GraphQL user batch failed; deleting %d stubs", len(batch))
+                for username in batch:
+                    _delete_user_stub(self._cur, self._conn, username)
+                return
+            try:
+                data = r.json().get("data", {})
+            except (ValueError, KeyError):
+                log.warning("GraphQL user batch malformed response; deleting %d stubs", len(batch))
+                for username in batch:
+                    _delete_user_stub(self._cur, self._conn, username)
+                return
+            for i, username in enumerate(batch):
+                node = data.get(f"u{i}")
+                if node:
+                    _write_user(self._cur, self._conn, username, node)
+                else:
+                    log.info("GraphQL null for user %s; falling back to REST", username)
+                    _rest_fallback_user(
+                        self._cur, self._conn, username, self._user_pool, self._producer
+                    )
 
     def _flush_repos(self) -> None:
-        batch = self._pending_repos[:GRAPHQL_BATCH_SIZE]
-        self._pending_repos = self._pending_repos[GRAPHQL_BATCH_SIZE:]
-        token, token_id = self._repo_pool.next_token()
-        if token is None:
-            log.warning("All repo tokens rate-limited; deleting %d stubs", len(batch))
-            for repo_id, _ in batch:
-                _delete_repo_stub(self._cur, self._conn, repo_id)
-            return
-        r, _ = logged_request(
-            self._cur, self._conn, "POST", GRAPHQL_ENDPOINT,
-            headers=_auth_headers(token),
-            json={"query": build_repo_query(batch)},
-            token_id=token_id,
-            request_type="graphql",
-            batch_size=len(batch),
-            kafka_producer=self._producer,
-            timeout=10,
-        )
-        self._repo_pool.update_from_response(token_id, r)
-        if r is None or not r.ok:
-            log.warning("GraphQL repo batch failed; deleting %d stubs", len(batch))
-            for repo_id, _ in batch:
-                _delete_repo_stub(self._cur, self._conn, repo_id)
-            return
-        data = r.json().get("data", {})
-        for i, (repo_id, full_name) in enumerate(batch):
-            node = data.get(f"r{i}")
-            if node:
-                _write_repo(self._cur, self._conn, repo_id, node)
-            else:
-                log.info("GraphQL null for repo %s; falling back to REST", full_name)
-                _rest_fallback_repo(
-                    self._cur, self._conn, repo_id, full_name,
-                    self._repo_pool, self._producer
-                )
+        while self._pending_repos:
+            batch = self._pending_repos[:GRAPHQL_BATCH_SIZE]
+            self._pending_repos = self._pending_repos[GRAPHQL_BATCH_SIZE:]
+            token, token_id = self._repo_pool.next_token()
+            if token is None:
+                log.warning("All repo tokens rate-limited; deleting %d stubs", len(batch))
+                for repo_id, _ in batch:
+                    _delete_repo_stub(self._cur, self._conn, repo_id)
+                return
+            r, _ = logged_request(
+                self._cur, self._conn, "POST", GRAPHQL_ENDPOINT,
+                headers=_auth_headers(token),
+                json={"query": build_repo_query(batch)},
+                token_id=token_id,
+                request_type="graphql",
+                batch_size=len(batch),
+                kafka_producer=self._producer,
+                timeout=10,
+            )
+            self._repo_pool.update_from_response(token_id, r)
+            if r is None or not r.ok:
+                log.warning("GraphQL repo batch failed; deleting %d stubs", len(batch))
+                for repo_id, _ in batch:
+                    _delete_repo_stub(self._cur, self._conn, repo_id)
+                return
+            try:
+                data = r.json().get("data", {})
+            except (ValueError, KeyError):
+                log.warning("GraphQL repo batch malformed response; deleting %d stubs", len(batch))
+                for repo_id, _ in batch:
+                    _delete_repo_stub(self._cur, self._conn, repo_id)
+                return
+            for i, (repo_id, full_name) in enumerate(batch):
+                node = data.get(f"r{i}")
+                if node:
+                    _write_repo(self._cur, self._conn, repo_id, node)
+                else:
+                    log.info("GraphQL null for repo %s; falling back to REST", full_name)
+                    _rest_fallback_repo(
+                        self._cur, self._conn, repo_id, full_name,
+                        self._repo_pool, self._producer
+                    )
