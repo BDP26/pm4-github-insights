@@ -135,6 +135,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       GITHUB_TOKEN_USER:       ${GITHUB_TOKEN_USER:-}
       GITHUB_TOKEN_REPO:       ${GITHUB_TOKEN_REPO:-}
+      GITHUB_TOKENS_USER:          ${GITHUB_TOKENS_USER:-}
+      GITHUB_TOKENS_REPO:          ${GITHUB_TOKENS_REPO:-}
       DB_HOST:                 timescaledb
       DB_PORT:                 "5432"
       DB_NAME:                 github_events
@@ -160,6 +162,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS:    kafka:9092
       GITHUB_TOKEN_USER:          ${GITHUB_TOKEN_USER:-}
       GITHUB_TOKEN_REPO:          ${GITHUB_TOKEN_REPO:-}
+      GITHUB_TOKENS_USER:          ${GITHUB_TOKENS_USER:-}
+      GITHUB_TOKENS_REPO:          ${GITHUB_TOKENS_REPO:-}
       DB_HOST:                    timescaledb
       DB_PORT:                    "5432"
       DB_NAME:                    github_events
@@ -185,6 +189,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS:    kafka:9092
       GITHUB_TOKEN_USER:          ${GITHUB_TOKEN_USER:-}
       GITHUB_TOKEN_REPO:          ${GITHUB_TOKEN_REPO:-}
+      GITHUB_TOKENS_USER:          ${GITHUB_TOKENS_USER:-}
+      GITHUB_TOKENS_REPO:          ${GITHUB_TOKENS_REPO:-}
       DB_HOST:                    timescaledb
       DB_PORT:                    "5432"
       DB_NAME:                    github_events
@@ -210,6 +216,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS:    kafka:9092
       GITHUB_TOKEN_USER:          ${GITHUB_TOKEN_USER:-}
       GITHUB_TOKEN_REPO:          ${GITHUB_TOKEN_REPO:-}
+      GITHUB_TOKENS_USER:          ${GITHUB_TOKENS_USER:-}
+      GITHUB_TOKENS_REPO:          ${GITHUB_TOKENS_REPO:-}
       DB_HOST:                    timescaledb
       DB_PORT:                    "5432"
       DB_NAME:                    github_events
