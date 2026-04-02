@@ -63,3 +63,67 @@ class TokenPool:
             self.mark_rate_limited(token_id, int(reset_ts))
         elif remaining is not None and int(remaining) == 0 and reset_ts:
             self.mark_rate_limited(token_id, int(reset_ts))
+
+
+# ── GraphQL Query Builders ───────────────────────────────────────
+
+def build_user_query(usernames: list[str]) -> str:
+    """Build a GraphQL alias query for up to GRAPHQL_BATCH_SIZE users."""
+    aliases = []
+    for i, login in enumerate(usernames):
+        escaped = login.replace("\\", "\\\\").replace('"', '\\"')
+        aliases.append(f"""
+  u{i}: repositoryOwner(login: "{escaped}") {{
+    login
+    __typename
+    ... on User {{
+      databaseId
+      company
+      location
+      followers {{ totalCount }}
+      repositories(privacy: PUBLIC) {{ totalCount }}
+    }}
+    ... on Organization {{
+      databaseId
+      description
+      location
+      repositories {{ totalCount }}
+    }}
+  }}""")
+    return "query BatchUsers {" + "".join(aliases) + "\n}"
+
+
+def build_repo_query(repos: list[tuple[int, str]]) -> str:
+    """Build a GraphQL alias query for up to GRAPHQL_BATCH_SIZE repos.
+
+    repos: list of (repo_id, full_name) where full_name is 'owner/name'.
+    """
+    aliases = []
+    for i, (repo_id, full_name) in enumerate(repos):
+        owner, _, name = full_name.partition("/")
+        owner_esc = owner.replace("\\", "\\\\").replace('"', '\\"')
+        name_esc = name.replace("\\", "\\\\").replace('"', '\\"')
+        aliases.append(f"""
+  r{i}: repository(owner: "{owner_esc}", name: "{name_esc}") {{
+    databaseId
+    name
+    nameWithOwner
+    description
+    primaryLanguage {{ name }}
+    licenseInfo {{ spdxId }}
+    repositoryTopics(first: 10) {{ nodes {{ topic {{ name }} }} }}
+    stargazerCount
+    forkCount
+    watchers {{ totalCount }}
+    hasIssuesEnabled
+    issues(states: OPEN) {{ totalCount }}
+    hasProjectsEnabled
+    isArchived
+    isDisabled
+    homepageUrl
+    diskUsage
+    createdAt
+    pushedAt
+    owner {{ login __typename }}
+  }}""")
+    return "query BatchRepos {" + "".join(aliases) + "\n}"
