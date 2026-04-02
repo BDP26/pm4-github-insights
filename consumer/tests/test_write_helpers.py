@@ -76,7 +76,9 @@ def test_write_repo_updates_repo_row():
         "repositoryTopics": {"nodes": [{"topic": {"name": "os"}}]},
         "stargazerCount": 100000, "forkCount": 5000,
         "watchers": {"totalCount": 3000}, "hasIssuesEnabled": True,
-        "issues": {"totalCount": 200}, "hasProjectsEnabled": False,
+        "hasDownloadsEnabled": True,
+        "issues": {"totalCount": 200}, "pullRequests": {"totalCount": 50},
+        "hasProjectsEnabled": False,
         "isArchived": False, "isDisabled": False,
         "homepageUrl": "https://kernel.org", "diskUsage": 5000000,
         "createdAt": "2011-09-04T22:14:16Z", "pushedAt": "2026-04-01T10:00:00Z",
@@ -98,7 +100,9 @@ def test_write_repo_handles_null_optional_fields():
         "description": None, "primaryLanguage": None, "licenseInfo": None,
         "repositoryTopics": {"nodes": []}, "stargazerCount": 0, "forkCount": 0,
         "watchers": {"totalCount": 0}, "hasIssuesEnabled": False,
-        "issues": {"totalCount": 0}, "hasProjectsEnabled": False,
+        "hasDownloadsEnabled": None,
+        "issues": {"totalCount": 0}, "pullRequests": {"totalCount": 0},
+        "hasProjectsEnabled": False,
         "isArchived": False, "isDisabled": False, "homepageUrl": None,
         "diskUsage": 0, "createdAt": "2020-01-01T00:00:00Z",
         "pushedAt": "2020-01-01T00:00:00Z",
@@ -138,6 +142,7 @@ def test_rest_repo_to_graphql_shape_maps_fields():
         "license": {"spdx_id": "GPL-2.0"}, "topics": ["os", "kernel"],
         "stargazers_count": 100, "forks_count": 50, "watchers_count": 30,
         "has_issues": True, "open_issues_count": 5, "has_projects": False,
+        "has_downloads": True,
         "archived": False, "disabled": False, "homepage": None, "size": 1000,
         "created_at": "2011-09-04T22:14:16Z", "pushed_at": "2026-04-01T10:00:00Z",
     }
@@ -146,3 +151,6 @@ def test_rest_repo_to_graphql_shape_maps_fields():
     assert shape["primaryLanguage"]["name"] == "C"
     assert shape["repositoryTopics"]["nodes"][0]["topic"]["name"] == "os"
     assert shape["stargazerCount"] == 100
+    assert shape["hasDownloadsEnabled"] is True
+    assert shape["issues"]["totalCount"] == 5
+    assert shape["pullRequests"]["totalCount"] == 0

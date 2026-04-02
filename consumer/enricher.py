@@ -86,6 +86,8 @@ def build_user_query(usernames: list[str]) -> str:
     }}
     ... on Organization {{
       databaseId
+      name
+      createdAt
       description
       location
       repositories {{ totalCount }}
@@ -117,7 +119,9 @@ def build_repo_query(repos: list[tuple[int, str]]) -> str:
     forkCount
     watchers {{ totalCount }}
     hasIssuesEnabled
+    hasDownloadsEnabled
     issues(states: OPEN) {{ totalCount }}
+    pullRequests(states: OPEN) {{ totalCount }}
     hasProjectsEnabled
     isArchived
     isDisabled
@@ -157,14 +161,16 @@ def _write_user(cur, conn, username: str, node: dict) -> None:
     elif typename == "Organization":
         cur.execute("""
             INSERT INTO organizations
-                (login, fetched_at, description, location, public_repos)
-            VALUES (%s, NOW(), %s, %s, %s)
+                (login, fetched_at, name, description, location, public_repos, created_at)
+            VALUES (%s, NOW(), %s, %s, %s, %s, %s)
             ON CONFLICT DO NOTHING
         """, (
             node.get("login", username),
+            node.get("name"),
             node.get("description"),
             node.get("location"),
             (node.get("repositories") or {}).get("totalCount"),
+            node.get("createdAt"),
         ))
         cur.execute(
             "DELETE FROM users WHERE username = %s AND fetched_at IS NULL",
@@ -197,6 +203,7 @@ def _write_repo(cur, conn, repo_id: int, node: dict) -> None:
             forks_count       = %s,
             watchers_count    = %s,
             has_issues        = %s,
+            has_downloads     = %s,
             open_issues_count = %s,
             has_projects      = %s,
             archived          = %s,
@@ -219,7 +226,8 @@ def _write_repo(cur, conn, repo_id: int, node: dict) -> None:
         node.get("forkCount"),
         (node.get("watchers") or {}).get("totalCount"),
         node.get("hasIssuesEnabled"),
-        (node.get("issues") or {}).get("totalCount"),
+        node.get("hasDownloadsEnabled"),
+        (node.get("issues") or {}).get("totalCount", 0) + (node.get("pullRequests") or {}).get("totalCount", 0),
         node.get("hasProjectsEnabled"),
         node.get("isArchived"),
         node.get("isDisabled"),
@@ -264,11 +272,13 @@ def _rest_user_to_graphql_shape(data: dict) -> dict:
     return {
         "__typename": "User" if typename == "User" else "Organization",
         "login": data.get("login"),
+        "name": data.get("name"),
         "company": data.get("company"),
         "location": data.get("location"),
         "followers": {"totalCount": data.get("followers", 0)},
         "repositories": {"totalCount": data.get("public_repos", 0)},
         "description": data.get("description"),
+        "createdAt": data.get("created_at"),
     }
 
 
@@ -291,7 +301,10 @@ def _rest_repo_to_graphql_shape(d: dict) -> dict:
         "forkCount": d.get("forks_count"),
         "watchers": {"totalCount": d.get("watchers_count")},
         "hasIssuesEnabled": d.get("has_issues"),
-        "issues": {"totalCount": d.get("open_issues_count")},
+        "hasDownloadsEnabled": d.get("has_downloads"),
+        # REST open_issues_count already includes PRs; set pullRequests to 0 to avoid double-counting
+        "issues": {"totalCount": d.get("open_issues_count", 0)},
+        "pullRequests": {"totalCount": 0},
         "hasProjectsEnabled": d.get("has_projects"),
         "isArchived": d.get("archived"),
         "isDisabled": d.get("disabled"),
@@ -524,26 +537,31 @@ class Enricher:
         self._producer = kafka_producer
         self._pending_users: list[str] = []
         self._pending_repos: list[tuple[int, str]] = []
+        self._pending_user_set: set[str] = set()
+        self._pending_repo_set: set[int] = set()
         self._last_flush = time.monotonic()
 
     # ── Public API ───────────────────────────────────────────────
 
+    def set_db(self, conn, cur) -> None:
+        """Update the DB connection and cursor (e.g. after reconnect)."""
+        self._conn = conn
+        self._cur = cur
+
     def add_user(self, username: str) -> None:
-        """Claim a user stub and enqueue for enrichment. Auto-flushes at batch size."""
-        if self._is_enriched_user(username):
+        """Enqueue a user for enrichment (stub claim deferred to flush). Auto-flushes at batch size."""
+        if self._is_enriched_user(username) or username in self._pending_user_set:
             return
-        if not self._claim_user_stub(username):
-            return
+        self._pending_user_set.add(username)
         self._pending_users.append(username)
         if len(self._pending_users) >= GRAPHQL_BATCH_SIZE:
             self._flush_users()
 
     def add_repo(self, repo_id: int, full_name: str) -> None:
-        """Claim a repo stub and enqueue for enrichment. Auto-flushes at batch size."""
-        if self._is_enriched_repo(repo_id):
+        """Enqueue a repo for enrichment (stub claim deferred to flush). Auto-flushes at batch size."""
+        if self._is_enriched_repo(repo_id) or repo_id in self._pending_repo_set:
             return
-        if not self._claim_repo_stub(repo_id, full_name):
-            return
+        self._pending_repo_set.add(repo_id)
         self._pending_repos.append((repo_id, full_name))
         if len(self._pending_repos) >= GRAPHQL_BATCH_SIZE:
             self._flush_repos()
@@ -580,34 +598,21 @@ class Enricher:
         )
         return self._cur.fetchone() is not None
 
-    def _claim_user_stub(self, username: str) -> bool:
-        self._cur.execute(
-            "INSERT INTO users (username) VALUES (%s) ON CONFLICT DO NOTHING RETURNING username",
-            (username,),
-        )
-        if not self._cur.fetchone():
-            return False
-        self._conn.commit()
-        return True
-
-    def _claim_repo_stub(self, repo_id: int, full_name: str) -> bool:
-        self._cur.execute(
-            """INSERT INTO repos (repo_id, name, full_name, owner_login, owner_type)
-               VALUES (%s, '', %s, '', '')
-               ON CONFLICT DO NOTHING RETURNING repo_id""",
-            (repo_id, full_name),
-        )
-        if not self._cur.fetchone():
-            return False
-        self._conn.commit()
-        return True
-
     # ── Flush Logic ──────────────────────────────────────────────
 
     def _flush_users(self) -> None:
         while self._pending_users:
             batch = self._pending_users[:GRAPHQL_BATCH_SIZE]
             self._pending_users = self._pending_users[GRAPHQL_BATCH_SIZE:]
+            for u in batch:
+                self._pending_user_set.discard(u)
+            # Claim stubs at flush time to avoid orphaned stubs on crash
+            for username in batch:
+                self._cur.execute(
+                    "INSERT INTO users (username) VALUES (%s) ON CONFLICT DO NOTHING",
+                    (username,),
+                )
+            self._conn.commit()
             token, token_id = self._user_pool.next_token()
             if token is None:
                 log.warning("All user tokens rate-limited; deleting %d stubs", len(batch))
@@ -651,6 +656,17 @@ class Enricher:
         while self._pending_repos:
             batch = self._pending_repos[:GRAPHQL_BATCH_SIZE]
             self._pending_repos = self._pending_repos[GRAPHQL_BATCH_SIZE:]
+            for repo_id, _ in batch:
+                self._pending_repo_set.discard(repo_id)
+            # Claim stubs at flush time to avoid orphaned stubs on crash
+            for repo_id, full_name in batch:
+                self._cur.execute(
+                    """INSERT INTO repos (repo_id, name, full_name, owner_login, owner_type)
+                       VALUES (%s, '', %s, '', '')
+                       ON CONFLICT DO NOTHING""",
+                    (repo_id, full_name),
+                )
+            self._conn.commit()
             token, token_id = self._repo_pool.next_token()
             if token is None:
                 log.warning("All repo tokens rate-limited; deleting %d stubs", len(batch))
@@ -670,7 +686,19 @@ class Enricher:
             self._repo_pool.update_from_response(token_id, r)
             if r is None or not r.ok:
                 if r is not None:
-                    log.warning("GraphQL repo batch failed with response %s; deleting %d stubs", r.json(), len(batch))
+                    try:
+                        resp_body = r.json()
+                    except ValueError:
+                        resp_body = {
+                            "status_code": r.status_code,
+                            "reason": r.reason,
+                            "text": r.text,
+                        }
+                    log.warning(
+                        "GraphQL repo batch failed with response %s; deleting %d stubs",
+                        resp_body,
+                        len(batch),
+                    )
                 else:
                     log.warning("GraphQL repo batch request failed; deleting %d stubs", len(batch))
                 for repo_id, _ in batch:

@@ -32,8 +32,8 @@ def _graphql_user_response(usernames: list[str]) -> dict:
 def test_single_user_graphql_batch():
     cur = MagicMock()
     conn = MagicMock()
-    # is_enriched checks: user→None, org→None; claim→("alice",)
-    cur.fetchone.side_effect = [None, None, ("alice",)]
+    # is_enriched checks: user→None, org→None (no claim step at add_user time)
+    cur.fetchone.side_effect = [None, None]
 
     resp_lib.add(
         resp_lib.POST, GRAPHQL_ENDPOINT,
@@ -57,8 +57,8 @@ def test_single_user_graphql_batch():
 def test_single_repo_graphql_batch():
     cur = MagicMock()
     conn = MagicMock()
-    # is_enriched(repo)→None; claim→(1,)
-    cur.fetchone.side_effect = [None, (1,)]
+    # is_enriched(repo)→None (no claim step at add_repo time)
+    cur.fetchone.side_effect = [None]
 
     resp_lib.add(
         resp_lib.POST, GRAPHQL_ENDPOINT,
@@ -77,7 +77,9 @@ def test_single_repo_graphql_batch():
                     "forkCount": 10,
                     "watchers": {"totalCount": 5},
                     "hasIssuesEnabled": True,
+                    "hasDownloadsEnabled": True,
                     "issues": {"totalCount": 0},
+                    "pullRequests": {"totalCount": 0},
                     "hasProjectsEnabled": False,
                     "isArchived": False,
                     "isDisabled": False,
@@ -108,10 +110,10 @@ def test_size_trigger_flushes_at_batch_size():
     cur = MagicMock()
     conn = MagicMock()
 
-    # Each user needs: is_enriched×2 (None,None) + claim→("uX",)
+    # Each user needs: is_enriched×2 (None,None) — no claim step at add_user time
     side_effects = []
     for _ in range(GRAPHQL_BATCH_SIZE):
-        side_effects += [None, None, ("u",)]
+        side_effects += [None, None]
     cur.fetchone.side_effect = side_effects
 
     usernames = [f"user{i}" for i in range(GRAPHQL_BATCH_SIZE)]
@@ -137,7 +139,7 @@ def test_size_trigger_flushes_at_batch_size():
 def test_null_alias_triggers_rest_fallback():
     cur = MagicMock()
     conn = MagicMock()
-    cur.fetchone.side_effect = [None, None, ("alice",)]
+    cur.fetchone.side_effect = [None, None]
 
     # GraphQL returns null for u0
     resp_lib.add(
@@ -173,7 +175,7 @@ def test_null_alias_triggers_rest_fallback():
 def test_all_tokens_rate_limited_deletes_stubs():
     cur = MagicMock()
     conn = MagicMock()
-    cur.fetchone.side_effect = [None, None, ("alice",)]
+    cur.fetchone.side_effect = [None, None]
 
     enricher = Enricher(["tok_a"], [], conn, cur, None)
     enricher._user_pool.mark_rate_limited("user_pool[0]", time.time() + 3600)
@@ -182,14 +184,12 @@ def test_all_tokens_rate_limited_deletes_stubs():
 
     calls = [c[0][0] for c in cur.execute.call_args_list]
     assert any("DELETE FROM users" in sql for sql in calls)
-
-
 @resp_lib.activate
 def test_backward_compat_single_token():
     """Enricher with a single token behaves like the old single-token path."""
     cur = MagicMock()
     conn = MagicMock()
-    cur.fetchone.side_effect = [None, None, ("alice",)]
+    cur.fetchone.side_effect = [None, None]
 
     resp_lib.add(
         resp_lib.POST, GRAPHQL_ENDPOINT,
@@ -213,7 +213,7 @@ def test_backward_compat_single_token():
 def test_graphql_500_deletes_stubs():
     cur = MagicMock()
     conn = MagicMock()
-    cur.fetchone.side_effect = [None, None, ("alice",)]
+    cur.fetchone.side_effect = [None, None]
 
     resp_lib.add(
         resp_lib.POST, GRAPHQL_ENDPOINT,
@@ -236,7 +236,7 @@ def test_flush_without_force_respects_interval():
     """flush() without force=True should not trigger HTTP call before interval elapses."""
     cur = MagicMock()
     conn = MagicMock()
-    cur.fetchone.side_effect = [None, None, ("alice",)]
+    cur.fetchone.side_effect = [None, None]
 
     enricher = Enricher(["tok_a"], [], conn, cur, None)
     enricher.add_user("alice")

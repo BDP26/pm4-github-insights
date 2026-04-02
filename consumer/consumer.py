@@ -252,6 +252,8 @@ def main():
                         owner_login, owner_type = res
                         if owner_type == "Organization":
                             enricher.add_user(owner_login)
+                            # Flush now so the org row is available for the membership check
+                            enricher.flush(force=True)
                             cur.execute(
                                 "SELECT 1 FROM organizations WHERE login = %s AND fetched_at IS NOT NULL",
                                 (owner_login,),
@@ -269,8 +271,7 @@ def main():
                     if "connection" in str(e).lower():
                         conn = db_connect()
                         cur = conn.cursor()
-                        enricher._conn = conn
-                        enricher._cur = cur
+                        enricher.set_db(conn, cur)
 
     except KeyboardInterrupt:
         log.info("Consumer stopped by user")
