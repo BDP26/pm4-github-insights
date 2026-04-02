@@ -60,6 +60,7 @@ def extract_detail(event: dict) -> str:
 
 
 def _is_non_bot_user(cur, username: str) -> bool:
+    """Return True if the user exists and is not a bot."""
     cur.execute(
         "SELECT username FROM users WHERE username = %s AND is_bot = FALSE",
         (username,),
@@ -128,6 +129,8 @@ def main():
     )
 
     multi_enabled, instance_index, total_instances = get_multi_instance_config()
+    # Per-instance group IDs ensure each instance gets independent offset tracking
+    # when manually assigning partitions (librdkafka requires this for assign() mode).
     effective_group_id = f"{GROUP_ID}-p{instance_index}" if multi_enabled else GROUP_ID
 
     consumer = Consumer({
@@ -196,6 +199,8 @@ def main():
                 raw_msgs.append(m)
 
             if coord_error_seen:
+                # NOT_COORDINATOR is transient — librdkafka requires a full unsubscribe/reassign
+                # cycle to rediscover the new coordinator after a Kafka broker failover.
                 time.sleep(_coord_backoff)
                 _coord_backoff = min(_coord_backoff * 2, 30.0)
                 log.info("Forcing Kafka group re-join after NOT_COORDINATOR…")
