@@ -1,4 +1,5 @@
 """GitHub enrichment: token pools, GraphQL batching, REST fallback, logging."""
+# NOTE: json, time, requests used by GraphQL/REST functions added in later tasks
 import json
 import logging
 import time
@@ -45,10 +46,14 @@ class TokenPool:
 
     def mark_rate_limited(self, token_id: str, reset_at: float) -> None:
         """Mark token as unavailable until reset_at (UTC timestamp)."""
-        idx = int(token_id.split("[")[1].rstrip("]"))
+        try:
+            idx = int(token_id.split("[")[1].rstrip("]"))
+        except (IndexError, ValueError):
+            log.error("Invalid token_id format: %s", token_id)
+            return
         self._reset_times[idx] = reset_at
 
-    def update_from_response(self, token_id: str, response) -> None:
+    def update_from_response(self, token_id: str, response: Optional["requests.Response"]) -> None:
         """Parse rate-limit headers and mark token if exhausted or 429/403."""
         if response is None:
             return
