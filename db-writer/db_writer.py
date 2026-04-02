@@ -39,7 +39,7 @@ def db_connect() -> psycopg2.extensions.connection:
             time.sleep(3)
 
 
-def handle_status_message(cur, conn, payload: dict) -> None:
+def handle_status_message(cur: psycopg2.extensions.cursor, conn: psycopg2.extensions.connection, payload: dict) -> None:
     """Insert a request_logs row from a github.events.status message."""
     try:
         cur.execute("""
@@ -81,7 +81,7 @@ def handle_status_message(cur, conn, payload: dict) -> None:
         conn.rollback()
 
 
-def handle_ratelimit_message(cur, conn, payload: dict) -> None:
+def handle_ratelimit_message(cur: psycopg2.extensions.cursor, conn: psycopg2.extensions.connection, payload: dict) -> None:
     """Insert a rate_limit_snapshots row from a github.ratelimit message."""
     try:
         cur.execute("""
