@@ -127,3 +127,175 @@ def build_repo_query(repos: list[tuple[int, str]]) -> str:
     owner {{ login __typename }}
   }}""")
     return "query BatchRepos {" + "".join(aliases) + "\n}"
+
+
+# ── DB Write Helpers ─────────────────────────────────────────────
+
+def _write_user(cur, conn, username: str, node: dict) -> None:
+    """Write a GraphQL repositoryOwner node to the DB."""
+    typename = node.get("__typename")
+    if typename in ("User", "Bot"):
+        cur.execute("""
+            UPDATE users
+            SET fetched_at   = NOW(),
+                company      = %s,
+                location     = %s,
+                public_repos = %s,
+                followers    = %s,
+                is_bot       = %s
+            WHERE username = %s
+        """, (
+            node.get("company"),
+            node.get("location"),
+            (node.get("repositories") or {}).get("totalCount"),
+            (node.get("followers") or {}).get("totalCount"),
+            typename == "Bot",
+            username,
+        ))
+        conn.commit()
+    elif typename == "Organization":
+        cur.execute("""
+            INSERT INTO organizations
+                (login, fetched_at, description, location, public_repos)
+            VALUES (%s, NOW(), %s, %s, %s)
+            ON CONFLICT DO NOTHING
+        """, (
+            node.get("login", username),
+            node.get("description"),
+            node.get("location"),
+            (node.get("repositories") or {}).get("totalCount"),
+        ))
+        cur.execute(
+            "DELETE FROM users WHERE username = %s AND fetched_at IS NULL",
+            (username,),
+        )
+        conn.commit()
+    else:
+        log.warning("Unexpected __typename %r for %s; deleting stub", typename, username)
+        _delete_user_stub(cur, conn, username)
+
+
+def _write_repo(cur, conn, repo_id: int, node: dict) -> None:
+    """Write a GraphQL repository node to the DB."""
+    topics = [
+        t["topic"]["name"]
+        for t in (node.get("repositoryTopics") or {}).get("nodes", [])
+    ]
+    cur.execute("""
+        UPDATE repos
+        SET fetched_at        = NOW(),
+            name              = %s,
+            full_name         = %s,
+            owner_login       = %s,
+            owner_type        = %s,
+            description       = %s,
+            language          = %s,
+            license_spdx      = %s,
+            topics            = %s,
+            stargazers_count  = %s,
+            forks_count       = %s,
+            watchers_count    = %s,
+            has_issues        = %s,
+            open_issues_count = %s,
+            has_projects      = %s,
+            archived          = %s,
+            disabled          = %s,
+            homepage          = %s,
+            size              = %s,
+            created_at        = %s,
+            pushed_at         = %s
+        WHERE repo_id = %s
+    """, (
+        node.get("name"),
+        node.get("nameWithOwner"),
+        (node.get("owner") or {}).get("login"),
+        (node.get("owner") or {}).get("__typename"),
+        node.get("description"),
+        (node.get("primaryLanguage") or {}).get("name"),
+        (node.get("licenseInfo") or {}).get("spdxId"),
+        topics,
+        node.get("stargazerCount"),
+        node.get("forkCount"),
+        (node.get("watchers") or {}).get("totalCount"),
+        node.get("hasIssuesEnabled"),
+        (node.get("issues") or {}).get("totalCount"),
+        node.get("hasProjectsEnabled"),
+        node.get("isArchived"),
+        node.get("isDisabled"),
+        node.get("homepageUrl"),
+        node.get("diskUsage"),
+        node.get("createdAt"),
+        node.get("pushedAt"),
+        repo_id,
+    ))
+    conn.commit()
+
+
+def _delete_user_stub(cur, conn, username: str) -> None:
+    try:
+        cur.execute(
+            "DELETE FROM users WHERE username = %s AND fetched_at IS NULL",
+            (username,),
+        )
+        conn.commit()
+    except Exception as e:
+        log.warning("Could not clean up user stub for %s: %s", username, e)
+
+
+def _delete_repo_stub(cur, conn, repo_id: int) -> None:
+    try:
+        cur.execute(
+            "DELETE FROM repos WHERE repo_id = %s AND fetched_at IS NULL",
+            (repo_id,),
+        )
+        conn.commit()
+    except Exception as e:
+        log.warning("Could not clean up repo stub for %s: %s", repo_id, e)
+
+
+# ── REST Shape Adapters ──────────────────────────────────────────
+
+def _rest_user_to_graphql_shape(data: dict) -> dict:
+    """Map REST /users/:login response to the shape _write_user expects."""
+    typename = data.get("type", "User")
+    if typename == "Bot":
+        return {"__typename": "Bot", "login": data.get("login")}
+    return {
+        "__typename": "User" if typename == "User" else "Organization",
+        "login": data.get("login"),
+        "company": data.get("company"),
+        "location": data.get("location"),
+        "followers": {"totalCount": data.get("followers", 0)},
+        "repositories": {"totalCount": data.get("public_repos", 0)},
+        "description": data.get("description"),
+    }
+
+
+def _rest_repo_to_graphql_shape(d: dict) -> dict:
+    """Map REST /repos/:owner/:name response to the shape _write_repo expects."""
+    return {
+        "name": d.get("name"),
+        "nameWithOwner": d.get("full_name"),
+        "owner": {
+            "login": (d.get("owner") or {}).get("login"),
+            "__typename": (d.get("owner") or {}).get("type"),
+        },
+        "description": d.get("description"),
+        "primaryLanguage": {"name": d["language"]} if d.get("language") else None,
+        "licenseInfo": {"spdxId": (d["license"] or {}).get("spdx_id")} if d.get("license") else None,
+        "repositoryTopics": {
+            "nodes": [{"topic": {"name": t}} for t in d.get("topics", [])]
+        },
+        "stargazerCount": d.get("stargazers_count"),
+        "forkCount": d.get("forks_count"),
+        "watchers": {"totalCount": d.get("watchers_count")},
+        "hasIssuesEnabled": d.get("has_issues"),
+        "issues": {"totalCount": d.get("open_issues_count")},
+        "hasProjectsEnabled": d.get("has_projects"),
+        "isArchived": d.get("archived"),
+        "isDisabled": d.get("disabled"),
+        "homepageUrl": d.get("homepage"),
+        "diskUsage": d.get("size"),
+        "createdAt": d.get("created_at"),
+        "pushedAt": d.get("pushed_at"),
+    }
