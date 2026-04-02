@@ -490,3 +490,189 @@ def _rest_fallback_repo(cur, conn, repo_id: int, full_name: str, pool: "TokenPoo
     else:
         log.warning("REST fallback repo %s: %s %s", full_name, r.status_code, r.reason)
         _delete_repo_stub(cur, conn, repo_id)
+
+
+# ── Token Parsing Helper ─────────────────────────────────────────
+
+def parse_token_pool(list_env: str, fallback_env: str) -> list[str]:
+    """Parse comma-separated token pool env var, falling back to single-token var."""
+    import os
+    val = os.getenv(list_env, "").strip()
+    if val:
+        return [t.strip() for t in val.split(",") if t.strip()]
+    single = os.getenv(fallback_env, "").strip()
+    return [single] if single else []
+
+
+# ── Enricher ─────────────────────────────────────────────────────
+
+class Enricher:
+    """Batched GitHub enricher — accumulates users/repos and flushes via GraphQL."""
+
+    def __init__(
+        self,
+        tokens_user: list[str],
+        tokens_repo: list[str],
+        conn,
+        cur,
+        kafka_producer,
+    ):
+        self._user_pool = TokenPool(tokens_user, "user_pool")
+        self._repo_pool = TokenPool(tokens_repo, "repo_pool")
+        self._conn = conn
+        self._cur = cur
+        self._producer = kafka_producer
+        self._pending_users: list[str] = []
+        self._pending_repos: list[tuple[int, str]] = []
+        self._last_flush = time.monotonic()
+
+    # ── Public API ───────────────────────────────────────────────
+
+    def add_user(self, username: str) -> None:
+        """Claim a user stub and enqueue for enrichment. Auto-flushes at batch size."""
+        if self._is_enriched_user(username):
+            return
+        if not self._claim_user_stub(username):
+            return
+        self._pending_users.append(username)
+        if len(self._pending_users) >= GRAPHQL_BATCH_SIZE:
+            self._flush_users()
+
+    def add_repo(self, repo_id: int, full_name: str) -> None:
+        """Claim a repo stub and enqueue for enrichment. Auto-flushes at batch size."""
+        if self._is_enriched_repo(repo_id):
+            return
+        if not self._claim_repo_stub(repo_id, full_name):
+            return
+        self._pending_repos.append((repo_id, full_name))
+        if len(self._pending_repos) >= GRAPHQL_BATCH_SIZE:
+            self._flush_repos()
+
+    def flush(self, force: bool = False) -> None:
+        """Flush pending buffers. Call with force=True on time trigger."""
+        now = time.monotonic()
+        if force or (now - self._last_flush) >= BATCH_FLUSH_INTERVAL_S:
+            if self._pending_users:
+                self._flush_users()
+            if self._pending_repos:
+                self._flush_repos()
+            self._last_flush = now
+
+    # ── DB Claim Helpers ─────────────────────────────────────────
+
+    def _is_enriched_user(self, username: str) -> bool:
+        self._cur.execute(
+            "SELECT 1 FROM users WHERE username = %s AND fetched_at IS NOT NULL",
+            (username,),
+        )
+        if self._cur.fetchone():
+            return True
+        self._cur.execute(
+            "SELECT 1 FROM organizations WHERE login = %s AND fetched_at IS NOT NULL",
+            (username,),
+        )
+        return self._cur.fetchone() is not None
+
+    def _is_enriched_repo(self, repo_id: int) -> bool:
+        self._cur.execute(
+            "SELECT 1 FROM repos WHERE repo_id = %s AND fetched_at IS NOT NULL",
+            (repo_id,),
+        )
+        return self._cur.fetchone() is not None
+
+    def _claim_user_stub(self, username: str) -> bool:
+        self._cur.execute(
+            "INSERT INTO users (username) VALUES (%s) ON CONFLICT DO NOTHING RETURNING username",
+            (username,),
+        )
+        if not self._cur.fetchone():
+            return False
+        self._conn.commit()
+        return True
+
+    def _claim_repo_stub(self, repo_id: int, full_name: str) -> bool:
+        self._cur.execute(
+            """INSERT INTO repos (repo_id, name, full_name, owner_login, owner_type)
+               VALUES (%s, '', %s, '', '')
+               ON CONFLICT DO NOTHING RETURNING repo_id""",
+            (repo_id, full_name),
+        )
+        if not self._cur.fetchone():
+            return False
+        self._conn.commit()
+        return True
+
+    # ── Flush Logic ──────────────────────────────────────────────
+
+    def _flush_users(self) -> None:
+        batch = self._pending_users[:GRAPHQL_BATCH_SIZE]
+        self._pending_users = self._pending_users[GRAPHQL_BATCH_SIZE:]
+        token, token_id = self._user_pool.next_token()
+        if token is None:
+            log.warning("All user tokens rate-limited; deleting %d stubs", len(batch))
+            for username in batch:
+                _delete_user_stub(self._cur, self._conn, username)
+            return
+        r, _ = logged_request(
+            self._cur, self._conn, "POST", GRAPHQL_ENDPOINT,
+            headers=_auth_headers(token),
+            json={"query": build_user_query(batch)},
+            token_id=token_id,
+            request_type="graphql",
+            batch_size=len(batch),
+            kafka_producer=self._producer,
+            timeout=10,
+        )
+        self._user_pool.update_from_response(token_id, r)
+        if r is None or not r.ok:
+            log.warning("GraphQL user batch failed; deleting %d stubs", len(batch))
+            for username in batch:
+                _delete_user_stub(self._cur, self._conn, username)
+            return
+        data = r.json().get("data", {})
+        for i, username in enumerate(batch):
+            node = data.get(f"u{i}")
+            if node:
+                _write_user(self._cur, self._conn, username, node)
+            else:
+                log.info("GraphQL null for user %s; falling back to REST", username)
+                _rest_fallback_user(
+                    self._cur, self._conn, username, self._user_pool, self._producer
+                )
+
+    def _flush_repos(self) -> None:
+        batch = self._pending_repos[:GRAPHQL_BATCH_SIZE]
+        self._pending_repos = self._pending_repos[GRAPHQL_BATCH_SIZE:]
+        token, token_id = self._repo_pool.next_token()
+        if token is None:
+            log.warning("All repo tokens rate-limited; deleting %d stubs", len(batch))
+            for repo_id, _ in batch:
+                _delete_repo_stub(self._cur, self._conn, repo_id)
+            return
+        r, _ = logged_request(
+            self._cur, self._conn, "POST", GRAPHQL_ENDPOINT,
+            headers=_auth_headers(token),
+            json={"query": build_repo_query(batch)},
+            token_id=token_id,
+            request_type="graphql",
+            batch_size=len(batch),
+            kafka_producer=self._producer,
+            timeout=10,
+        )
+        self._repo_pool.update_from_response(token_id, r)
+        if r is None or not r.ok:
+            log.warning("GraphQL repo batch failed; deleting %d stubs", len(batch))
+            for repo_id, _ in batch:
+                _delete_repo_stub(self._cur, self._conn, repo_id)
+            return
+        data = r.json().get("data", {})
+        for i, (repo_id, full_name) in enumerate(batch):
+            node = data.get(f"r{i}")
+            if node:
+                _write_repo(self._cur, self._conn, repo_id, node)
+            else:
+                log.info("GraphQL null for repo %s; falling back to REST", full_name)
+                _rest_fallback_repo(
+                    self._cur, self._conn, repo_id, full_name,
+                    self._repo_pool, self._producer
+                )
