@@ -424,6 +424,7 @@ def logged_request(cur, conn, method, url, **kwargs):
                 log.warning("Rate-limited (%s). Skipping enrichment until reset at %s.",
                             r.status_code, datetime.fromtimestamp(reset_at, tz=timezone.utc).isoformat())
 
+        r.close()
         return r, meta
     except requests.RequestException as exc:
         error_meta = {
