@@ -299,3 +299,194 @@ def _rest_repo_to_graphql_shape(d: dict) -> dict:
         "createdAt": d.get("created_at"),
         "pushedAt": d.get("pushed_at"),
     }
+
+
+# ── Auth & Redaction ─────────────────────────────────────────────
+
+def _auth_headers(token: str) -> dict:
+    return {
+        "Authorization": f"bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "ZHAW-Explorer/2.0",
+    }
+
+
+def _redact_headers(headers: dict) -> dict:
+    sensitive = {
+        "authorization", "proxy-authorization", "cookie",
+        "set-cookie", "x-api-key", "x-api-token", "x-auth-token", "x-access-token",
+    }
+    return {
+        k: "[REDACTED]" if isinstance(k, str) and k.lower() in sensitive else v
+        for k, v in headers.items()
+    }
+
+
+# ── Kafka Publishing ─────────────────────────────────────────────
+
+def _publish_ratelimit(kafka_producer, headers: dict, token_id: Optional[str]) -> None:
+    if kafka_producer is None:
+        return
+    remaining = headers.get("X-RateLimit-Remaining")
+    if remaining is None:
+        return
+    reset_ts = headers.get("X-RateLimit-Reset")
+    payload = {
+        "source": "consumer",
+        "resource": headers.get("X-RateLimit-Resource", "core"),
+        "limit": int(headers.get("X-RateLimit-Limit", 0)),
+        "used": int(headers.get("X-RateLimit-Used", 0)),
+        "remaining": int(remaining),
+        "reset_at": (
+            datetime.fromtimestamp(int(reset_ts), tz=timezone.utc).isoformat()
+            if reset_ts else None
+        ),
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+        "token_id": token_id,
+    }
+    try:
+        kafka_producer.produce(
+            topic=TOPIC_RATELIMIT,
+            key=f"ratelimit-{int(time.time())}",
+            value=json.dumps(payload),
+        )
+        kafka_producer.poll(0)
+    except Exception as e:
+        log.warning("Failed to publish rate limit: %s", e)
+
+
+def _publish_status(kafka_producer, meta: dict) -> None:
+    if kafka_producer is None:
+        return
+    try:
+        kafka_producer.produce(
+            topic=TOPIC_STATUS,
+            key=f"status-{int(time.time())}",
+            value=json.dumps(meta),
+        )
+        kafka_producer.poll(0)
+    except Exception as e:
+        log.warning("Failed to publish request status: %s", e)
+
+
+# ── HTTP Request Logger ──────────────────────────────────────────
+
+def logged_request(
+    cur, conn, method: str, url: str,
+    *,
+    token_id: Optional[str],
+    request_type: str,
+    batch_size: Optional[int],
+    kafka_producer,
+    **kwargs,
+):
+    """Perform an HTTP request and publish status + rate-limit events to Kafka."""
+    sent_at = datetime.now(timezone.utc)
+    try:
+        r = requests.request(method, url, **kwargs)
+        received_at = datetime.now(timezone.utc)
+        meta = {
+            "request_success": r.ok,
+            "sent_at": sent_at.isoformat(),
+            "received_at": received_at.isoformat(),
+            "elapsed_s": r.elapsed.total_seconds(),
+            "method": r.request.method,
+            "url": r.request.url,
+            "request_headers": _redact_headers(dict(r.request.headers)),
+            "status_code": r.status_code,
+            "reason": r.reason,
+            "response_bytes": len(r.content),
+            "response_headers": _redact_headers(dict(r.headers)),
+            "redirects": len(r.history),
+            "final_url": r.url,
+            "http_version": r.raw.version,
+            "encoding": r.encoding,
+            "request_type": request_type,
+            "batch_size": batch_size,
+            "token_id": token_id,
+        }
+        _publish_status(kafka_producer, meta)
+        _publish_ratelimit(kafka_producer, dict(r.headers), token_id)
+        return r, meta
+    except requests.RequestException as exc:
+        error_meta = {
+            "request_success": False,
+            "sent_at": sent_at.isoformat(),
+            "received_at": datetime.now(timezone.utc).isoformat(),
+            "error": str(exc),
+            "method": method,
+            "url": url,
+            "status_code": None,
+            "reason": None,
+            "response_bytes": None,
+            "response_headers": None,
+            "redirects": None,
+            "final_url": None,
+            "http_version": None,
+            "encoding": None,
+            "request_type": request_type,
+            "batch_size": batch_size,
+            "token_id": token_id,
+        }
+        log.warning("GitHub API request failed: %s", exc)
+        return None, error_meta
+
+
+# ── REST Fallback Functions ──────────────────────────────────────
+
+def _rest_fallback_user(cur, conn, username: str, pool: "TokenPool", kafka_producer) -> None:
+    """Single-item REST fallback for a user alias that returned null in GraphQL."""
+    token, token_id = pool.next_token()
+    if token is None:
+        _delete_user_stub(cur, conn, username)
+        return
+    r, _ = logged_request(
+        cur, conn, "GET",
+        f"https://api.github.com/users/{username}",
+        headers=_auth_headers(token),
+        token_id=token_id,
+        request_type="rest",
+        batch_size=None,
+        kafka_producer=kafka_producer,
+        timeout=5,
+    )
+    pool.update_from_response(token_id, r)
+    if r is None:
+        _delete_user_stub(cur, conn, username)
+        return
+    if r.status_code == 404:
+        cur.execute("UPDATE users SET fetched_at = NOW() WHERE username = %s", (username,))
+        conn.commit()
+        return
+    if r.status_code == 200:
+        _write_user(cur, conn, username, _rest_user_to_graphql_shape(r.json()))
+    else:
+        log.warning("REST fallback user %s: %s %s", username, r.status_code, r.reason)
+        _delete_user_stub(cur, conn, username)
+
+
+def _rest_fallback_repo(cur, conn, repo_id: int, full_name: str, pool: "TokenPool", kafka_producer) -> None:
+    """Single-item REST fallback for a repo alias that returned null in GraphQL."""
+    token, token_id = pool.next_token()
+    if token is None:
+        _delete_repo_stub(cur, conn, repo_id)
+        return
+    r, _ = logged_request(
+        cur, conn, "GET",
+        f"https://api.github.com/repos/{full_name}",
+        headers=_auth_headers(token),
+        token_id=token_id,
+        request_type="rest",
+        batch_size=None,
+        kafka_producer=kafka_producer,
+        timeout=5,
+    )
+    pool.update_from_response(token_id, r)
+    if r is None:
+        _delete_repo_stub(cur, conn, repo_id)
+        return
+    if r.status_code == 200:
+        _write_repo(cur, conn, repo_id, _rest_repo_to_graphql_shape(r.json()))
+    else:
+        log.warning("REST fallback repo %s: %s %s", full_name, r.status_code, r.reason)
+        _delete_repo_stub(cur, conn, repo_id)
