@@ -127,7 +127,7 @@
           }
         }
       ],
-      "title": "New panel",
+      "title": "Trending repos",
       "type": "barchart"
     },
     {
@@ -274,6 +274,6 @@
   "timezone": "browser",
   "title": "Hidden Gem",
   "uid": "adj2x5m",
-  "version": 16,
+  "version": 1,
   "weekStart": ""
 }
