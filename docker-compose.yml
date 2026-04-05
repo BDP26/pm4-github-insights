@@ -10,6 +10,7 @@ volumes:
   kafka-data:
   timescale-data:
   grafana-data:
+  photon_data:
 
 services:
   # ── Kafka (KRaft mode) ──────────────────────────────────────────
@@ -75,6 +76,7 @@ services:
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic github.events.raw --partitions 3 --replication-factor 1
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic github.events.status --partitions 3 --replication-factor 1
       /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic github.ratelimit --partitions 3 --replication-factor 1
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic geocoder.requests --partitions 1 --replication-factor 1
 
       echo '--- Topics ready ---'
       "
@@ -92,6 +94,7 @@ services:
       - ./db/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
       - ./db/migrations/001_add_is_bot_to_users.sql:/docker-entrypoint-initdb.d/02_migration_001.sql:ro
       - ./db/migrations/002_geocoder_and_ratelimit.sql:/docker-entrypoint-initdb.d/03_migration_002.sql:ro
+      - ./db/migrations/003_geocoder_request_logs.sql:/docker-entrypoint-initdb.d/04_migration_003.sql:ro
     environment:
       POSTGRES_DB:       github_events
       POSTGRES_USER:     github
@@ -118,37 +121,11 @@ services:
       MAX_PAGES:               "3"
     restart: unless-stopped
 
-  # ── Consumer / Enricher (single-instance, default) ────────────
-  consumer:
-    build: ./consumer
-    pull_policy: build
-    container_name: github-consumer
-    profiles: [single-consumer]
-    networks: [github-stream]
-    depends_on:
-      kafka:
-        condition: service_healthy
-      timescaledb:
-        condition: service_healthy
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      GITHUB_TOKEN_USER:       ${GITHUB_TOKEN_USER:-}
-      GITHUB_TOKEN_REPO:       ${GITHUB_TOKEN_REPO:-}
-      DB_HOST:                 timescaledb
-      DB_PORT:                 "5432"
-      DB_NAME:                 github_events
-      DB_USER:                 github
-      DB_PASSWORD:             github_secret
-    restart: unless-stopped
-
-  # ── Consumer instances 0-2 (multi-instance mode, opt-in) ──────
-  # Usage: docker compose --profile multi-consumer up -d
-  # Disables the single-instance `consumer` service and runs 3 pinned instances.
+  # ── Consumer instances 0-2 (multi-instance mode) ──────
   consumer-0:
     build: ./consumer
     pull_policy: build
     container_name: github-consumer-0
-    profiles: [multi-consumer]
     networks: [github-stream]
     depends_on:
       kafka:
@@ -173,7 +150,6 @@ services:
     build: ./consumer
     pull_policy: build
     container_name: github-consumer-1
-    profiles: [multi-consumer]
     networks: [github-stream]
     depends_on:
       kafka:
@@ -198,7 +174,6 @@ services:
     build: ./consumer
     pull_policy: build
     container_name: github-consumer-2
-    profiles: [multi-consumer]
     networks: [github-stream]
     depends_on:
       kafka:
@@ -226,9 +201,14 @@ services:
     container_name: geocoder
     networks: [github-stream]
     depends_on:
+      kafka:
+        condition: service_healthy
       timescaledb:
         condition: service_healthy
+      photon:
+        condition: service_healthy
     environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       DB_HOST:     timescaledb
       DB_PORT:     "5432"
       DB_NAME:     github_events
@@ -258,18 +238,38 @@ services:
 
   # ── Grafana (Visualisation) ────────────────────────────────────
   grafana:
-      image: grafana/grafana-oss:latest-ubuntu
-      container_name: grafana
-      networks: [github-stream]
-      ports:
-        - "3001:3000"
-      environment:
-        - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
-      volumes:
-        - grafana-data:/var/lib/grafana
-        - ./grafana/provisioning:/etc/grafana/provisioning
-      # HIER WIRD AUF DEN HEALTHCHECK DER DB GEWARTET
-      depends_on:
-        timescaledb:
-          condition: service_healthy
-      restart: unless-stopped
+    image: grafana/grafana-oss:latest-ubuntu
+    container_name: grafana
+    networks: [github-stream]
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    # HIER WIRD AUF DEN HEALTHCHECK DER DB GEWARTET
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Photon (Geocoding) ────────────────────────────────────
+  photon:
+    image: rtuszik/photon-docker:latest
+    container_name: photon
+    networks: [github-stream]
+    environment:
+      - UPDATE_STRATEGY=PARALLEL
+      - UPDATE_INTERVAL=720h # Check for updates every 30 days
+      - REGION=${PHOTON_REGION:-africa} # Default dev footprint, override with PHOTON_REGION=planet for prod
+    volumes:
+      - photon_data:/photon/data
+    restart: unless-stopped
+    ports:
+      - "2322:2322"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS 'http://localhost:2322/api?q=zurich&limit=1' >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 200 # Photon can be slow to start, especially on first run when it needs to download and index OSM data. We allow for a long startup time here.
