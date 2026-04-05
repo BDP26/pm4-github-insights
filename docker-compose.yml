@@ -45,6 +45,7 @@ services:
       timeout: 10s
       retries: 8
       start_period: 30s
+    restart: unless-stopped  
 
   # ── Kafka UI ───────────────────────────────────────────────────
   kafka-ui:
@@ -59,6 +60,7 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+    restart: unless-stopped
 
   # ── Topic initialisation ───────────────────────────────────────
   kafka-init:
@@ -102,7 +104,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
+    restart: unless-stopped
   # ── GitHub API Producer ────────────────────────────────────────
   producer:
     build: ./producer
