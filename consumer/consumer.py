@@ -97,17 +97,10 @@ def _delete_repo_stub(cur, conn, repo_id: int) -> None:
 
 
 def enrich_user(cur, conn, username):
-    """Enrich a GitHub actor using the claim-before-fetch pattern.
-
-    1. Fast path: already fully enriched → return True without API call.
-    2. Claim stub via INSERT ... ON CONFLICT DO NOTHING RETURNING.
-       If no row returned, another consumer owns this username → return False.
-    3. Call GitHub API, then UPDATE the stub row with full data.
-    """
-    # Skip if rate-limited
     if _ratelimit_reset_user > datetime.now(timezone.utc).timestamp():
         return False
-    # Fast path: fully enriched user
+
+    # Fast Path: Schon erfolgreich geladen oder bereits als 404 markiert
     cur.execute(
         "SELECT username FROM users WHERE username = %s AND fetched_at IS NOT NULL",
         (username,),
@@ -115,7 +108,6 @@ def enrich_user(cur, conn, username):
     if cur.fetchone():
         return True
 
-    # Fast path: fully enriched org
     cur.execute(
         "SELECT login FROM organizations WHERE login = %s AND fetched_at IS NOT NULL",
         (username,),
@@ -123,15 +115,14 @@ def enrich_user(cur, conn, username):
     if cur.fetchone():
         return True
 
-    # Claim the slot — only one consumer wins
+    # Stub reservieren
     cur.execute(
         "INSERT INTO users (username) VALUES (%s) ON CONFLICT DO NOTHING RETURNING username",
         (username,),
     )
     if not cur.fetchone():
-        # Another consumer already inserted a stub or full row
         return False
-    conn.commit()  # make stub visible to other consumers immediately
+    conn.commit()
 
     try:
         r, _ = logged_request(
@@ -141,12 +132,12 @@ def enrich_user(cur, conn, username):
             timeout=5,
         )
         if r is None:
-            # Network error — delete stub so another consumer can retry
             _delete_user_stub(cur, conn, username)
             return False
 
         if r.status_code == 404:
-            log.info("Stored 404 stub for unresolvable actor: %s", username)
+            # NEGATIVE CACHING: Markieren, damit wir nicht wieder fragen
+            log.info("User/Org %s not found (404). Marking as fetched to avoid retries.", username)
             cur.execute(
                 "UPDATE users SET fetched_at = NOW() WHERE username = %s",
                 (username,),
@@ -157,7 +148,6 @@ def enrich_user(cur, conn, username):
         if r.status_code == 200:
             d = r.json()
             actor_type = d.get("type")
-
             if actor_type == "User":
                 cur.execute("""
                     UPDATE users
@@ -173,18 +163,14 @@ def enrich_user(cur, conn, username):
                       d["login"]))
                 conn.commit()
                 return True
-
             elif actor_type == "Bot":
-                log.info("Stored bot actor: %s", d["login"])
                 cur.execute(
                     "UPDATE users SET fetched_at = NOW(), is_bot = %s WHERE username = %s",
                     (True, d["login"]),
                 )
                 conn.commit()
                 return True
-
-            else:
-                # Organization: insert into organizations, remove stub from users
+            else: # Organization
                 cur.execute("""
                     INSERT INTO organizations
                         (login, fetched_at, name, description, location,
@@ -193,19 +179,12 @@ def enrich_user(cur, conn, username):
                     ON CONFLICT DO NOTHING
                 """, (d["login"], d.get("name"), d.get("description"),
                       d.get("location"), d.get("public_repos"), d.get("created_at")))
-                # Remove the users stub for this org actor
-                cur.execute(
-                    "DELETE FROM users WHERE username = %s AND fetched_at IS NULL",
-                    (username,),
-                )
+                cur.execute("DELETE FROM users WHERE username = %s AND fetched_at IS NULL", (username,))
                 conn.commit()
                 return True
-
         else:
-            log.warning("User API %s returned %s for %s", r.status_code, r.reason, username)
             _delete_user_stub(cur, conn, username)
             return False
-
     except Exception as e:
         log.error("User API Error for %s: %s", username, e)
         _delete_user_stub(cur, conn, username)
@@ -213,15 +192,10 @@ def enrich_user(cur, conn, username):
 
 
 def enrich_repo(cur, conn, repo_id: int, full_name: str):
-    """Enrich a repository using the claim-before-fetch pattern.
-
-    Signature change: now takes repo_id (int) as well as full_name.
-    The claim stub uses repo_id as the conflict key (PRIMARY KEY).
-    """
-    # Skip if rate-limited
     if _ratelimit_reset_repo > datetime.now(timezone.utc).timestamp():
         return False
-    # Fast path
+
+    # Fast path: Wenn fetched_at gesetzt ist (egal ob durch 200 oder 404), ignorieren
     cur.execute(
         "SELECT repo_id FROM repos WHERE repo_id = %s AND fetched_at IS NOT NULL",
         (repo_id,),
@@ -229,7 +203,6 @@ def enrich_repo(cur, conn, repo_id: int, full_name: str):
     if cur.fetchone():
         return True
 
-    # Claim stub (repo_id is the PK; name/full_name/owner_login satisfy NOT NULL)
     cur.execute(
         """INSERT INTO repos (repo_id, name, full_name, owner_login, owner_type)
            VALUES (%s, '', %s, '', '')
@@ -249,9 +222,9 @@ def enrich_repo(cur, conn, repo_id: int, full_name: str):
             timeout=5,
         )
         if r is None:
-            # Network error — delete stub so another consumer can retry
             _delete_repo_stub(cur, conn, repo_id)
             return False
+
         if r.status_code == 200:
             d = r.json()
             cur.execute("""
@@ -282,19 +255,28 @@ def enrich_repo(cur, conn, repo_id: int, full_name: str):
             """, (
                 d["name"], d["full_name"],
                 d["owner"]["login"], d["owner"]["type"],
-                d.get("description"),
-                d.get("language"),
+                d.get("description"), d.get("language"),
                 (d.get("license") or {}).get("spdx_id"),
                 d.get("topics", []),
-                d.get("stargazers_count"), d.get("forks_count"),d.get("watchers_count"),
+                d.get("stargazers_count"), d.get("forks_count"), d.get("watchers_count"),
                 d.get("has_issues"), d.get("open_issues_count"),
-                d.get("has_projects"), d.get("has_downloads"),d.get("archived"), d.get("disabled"),
-                d.get("homepage"),
-                d.get("size"), d.get("created_at"), d.get("pushed_at"),
-                d["id"],
+                d.get("has_projects"), d.get("has_downloads"), d.get("archived"), d.get("disabled"),
+                d.get("homepage"), d.get("size"), d.get("created_at"), d.get("pushed_at"),
+                repo_id,
             ))
             conn.commit()
             return True
+
+        elif r.status_code == 404:
+            # NEGATIVE CACHING für Repositories
+            log.info("Repo %s not found (404). Marking as fetched to avoid retries.", full_name)
+            cur.execute(
+                "UPDATE repos SET fetched_at = NOW() WHERE repo_id = %s",
+                (repo_id,),
+            )
+            conn.commit()
+            return False
+
         else:
             log.warning("Repo API %s returned %s for %s", r.status_code, r.reason, full_name)
             _delete_repo_stub(cur, conn, repo_id)
