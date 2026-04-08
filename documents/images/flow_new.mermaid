@@ -1,0 +1,55 @@
+graph LR
+    %% Definition der Styles
+    classDef source fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef streaming fill:#69f,stroke:#333,stroke-width:2px;
+    classDef enrichment fill:#ff9,stroke:#333,stroke-width:2px;
+    classDef storage fill:#9f9,stroke:#333,stroke-width:2px;
+    classDef logging fill:#f96,stroke:#333,stroke-width:2px;
+
+    %% Ingestion Layer
+    Source[("Datenquelle")]:::source
+    Prod["Producer (API Ingestion)"]:::source
+
+    subgraph Kafka_Cluster ["Event Streaming"]
+        Kafka["Kafka Topic"]:::streaming
+    end
+
+    %% Consumer Layer
+    subgraph Consumer_Group ["Parallel Processing"]
+        C1["Consumer 1"]:::streaming
+        C2["Consumer 2"]:::streaming
+        C3["Consumer 3"]:::streaming
+    end
+
+    %% Storage Layer
+    DB[("Datenbank <br/> (Main, Geocoding & Logs)")]:::storage
+
+    %% Geocoding Layer
+    subgraph Enrichment_Process ["Asynchrones Geocoding"]
+        GeoSvc["Geocoder Service"]:::enrichment
+        Photon["Photon API"]:::enrichment
+    end
+
+    %% Central Logging
+    LogWriter["Log Writer / DB Writer"]:::logging
+
+    %% Datenfluss Ingestion
+    Source --> Prod
+    Prod --> Kafka
+    Prod -->|API Response Logs| LogWriter
+
+    %% Datenfluss Processing
+    Kafka --> C1
+    Kafka --> C2
+    Kafka --> C3
+
+    C1 & C2 & C3 -->|Insert| DB
+
+    %% Geocoding-Zyklus
+    DB -.->|Poll: Suche 'not_geocoded'| GeoSvc
+    GeoSvc <-->|Request/Response| Photon
+    GeoSvc -->|Update Geodaten| DB
+
+    %% Zentrales Logging Flow
+    GeoSvc -->|API Metadaten| LogWriter
+    LogWriter -->|Write All Logs| DB
