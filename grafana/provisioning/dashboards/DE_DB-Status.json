@@ -561,7 +561,7 @@
               "viz": false
             },
             "insertNulls": false,
-            "lineInterpolation": "linear",
+            "lineInterpolation": "stepAfter",
             "lineStyle": {
               "fill": "solid"
             },
