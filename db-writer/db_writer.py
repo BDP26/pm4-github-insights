@@ -47,10 +47,12 @@ def handle_status_message(cur: psycopg2.extensions.cursor, conn: psycopg2.extens
                 request_success, sent_at, received_at, elapsed_s,
                 method, url, status_code, reason, response_bytes,
                 redirects, final_url, http_version, encoding,
-                request_headers, response_headers, error
+                request_headers, response_headers, error,
+                request_type, batch_size, token_id
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s
             )
         """, (
             payload.get("request_success"),
@@ -69,6 +71,9 @@ def handle_status_message(cur: psycopg2.extensions.cursor, conn: psycopg2.extens
             psycopg2.extras.Json(payload.get("request_headers")),
             psycopg2.extras.Json(payload.get("response_headers")),
             payload.get("error"),
+            payload.get("request_type", "rest"),
+            payload.get("batch_size"),
+            payload.get("token_id"),
         ))
         conn.commit()
     except Exception as e:
@@ -81,8 +86,8 @@ def handle_ratelimit_message(cur: psycopg2.extensions.cursor, conn: psycopg2.ext
     try:
         cur.execute("""
             INSERT INTO rate_limit_snapshots
-                (source, resource, limit_, used, remaining, reset_at, recorded_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                (source, resource, limit_, used, remaining, reset_at, recorded_at, token_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             payload.get("source"),
             payload.get("resource"),
@@ -91,6 +96,7 @@ def handle_ratelimit_message(cur: psycopg2.extensions.cursor, conn: psycopg2.ext
             payload.get("remaining"),
             payload.get("reset_at"),
             payload.get("recorded_at"),
+            payload.get("token_id"),
         ))
         conn.commit()
     except Exception as e:

@@ -45,6 +45,7 @@ services:
       timeout: 10s
       retries: 8
       start_period: 30s
+    restart: unless-stopped  
 
   # ── Kafka UI ───────────────────────────────────────────────────
   kafka-ui:
@@ -59,6 +60,7 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+    restart: unless-stopped
 
   # ── Topic initialisation ───────────────────────────────────────
   kafka-init:
@@ -92,6 +94,10 @@ services:
       - ./db/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
       - ./db/migrations/001_add_is_bot_to_users.sql:/docker-entrypoint-initdb.d/02_migration_001.sql:ro
       - ./db/migrations/002_geocoder_and_ratelimit.sql:/docker-entrypoint-initdb.d/03_migration_002.sql:ro
+      - ./db/migrations/003_graphql_logging.sql:/docker-entrypoint-initdb.d/04_migration_003.sql:ro
+      - ./db/migrations/004_hidden_gem_functions.sql:/docker-entrypoint-initdb.d/05_migration_004.sql:ro
+
+
     environment:
       POSTGRES_DB:       github_events
       POSTGRES_USER:     github
@@ -101,7 +107,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
+    restart: unless-stopped
   # ── GitHub API Producer ────────────────────────────────────────
   producer:
     build: ./producer
@@ -134,6 +140,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       GITHUB_TOKEN_USER:       ${GITHUB_TOKEN_USER:-}
       GITHUB_TOKEN_REPO:       ${GITHUB_TOKEN_REPO:-}
+      GITHUB_TOKENS_USER:          ${GITHUB_TOKENS_USER:-}
+      GITHUB_TOKENS_REPO:          ${GITHUB_TOKENS_REPO:-}
       DB_HOST:                 timescaledb
       DB_PORT:                 "5432"
       DB_NAME:                 github_events
@@ -159,6 +167,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS:    kafka:9092
       GITHUB_TOKEN_USER:          ${GITHUB_TOKEN_USER:-}
       GITHUB_TOKEN_REPO:          ${GITHUB_TOKEN_REPO:-}
+      GITHUB_TOKENS_USER:          ${GITHUB_TOKENS_USER:-}
+      GITHUB_TOKENS_REPO:          ${GITHUB_TOKENS_REPO:-}
       DB_HOST:                    timescaledb
       DB_PORT:                    "5432"
       DB_NAME:                    github_events
@@ -184,6 +194,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS:    kafka:9092
       GITHUB_TOKEN_USER:          ${GITHUB_TOKEN_USER:-}
       GITHUB_TOKEN_REPO:          ${GITHUB_TOKEN_REPO:-}
+      GITHUB_TOKENS_USER:          ${GITHUB_TOKENS_USER:-}
+      GITHUB_TOKENS_REPO:          ${GITHUB_TOKENS_REPO:-}
       DB_HOST:                    timescaledb
       DB_PORT:                    "5432"
       DB_NAME:                    github_events
@@ -209,6 +221,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS:    kafka:9092
       GITHUB_TOKEN_USER:          ${GITHUB_TOKEN_USER:-}
       GITHUB_TOKEN_REPO:          ${GITHUB_TOKEN_REPO:-}
+      GITHUB_TOKENS_USER:          ${GITHUB_TOKENS_USER:-}
+      GITHUB_TOKENS_REPO:          ${GITHUB_TOKENS_REPO:-}
       DB_HOST:                    timescaledb
       DB_PORT:                    "5432"
       DB_NAME:                    github_events

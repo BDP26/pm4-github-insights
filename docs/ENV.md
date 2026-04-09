@@ -25,6 +25,8 @@ Docker Compose reads this file automatically.
 |---|---|---|---|
 | `GITHUB_TOKEN_USER` | No | _(empty)_ | GitHub PAT used to fetch user profile data (`/users/:login`). Raises rate limit from 60 to 5 000 req/h. |
 | `GITHUB_TOKEN_REPO` | No | _(empty)_ | GitHub PAT used to fetch repository metadata (`/repos/:owner/:repo`). Separate token allows independent rate-limit budgets. |
+| `GITHUB_TOKENS_USER` | No | _(empty)_ | Comma-separated list of GitHub PATs for user enrichment. Takes precedence over `GITHUB_TOKEN_USER`. Each token has its own 5,000 req/hour budget. |
+| `GITHUB_TOKENS_REPO` | No | _(empty)_ | Comma-separated list of GitHub PATs for repo enrichment. Takes precedence over `GITHUB_TOKEN_REPO`. |
 | `KAFKA_BOOTSTRAP_SERVERS` | Yes | `kafka:9092` | Kafka broker address. |
 | `DB_HOST` | Yes | `timescaledb` | TimescaleDB hostname. |
 | `DB_PORT` | No | `5432` | TimescaleDB port. |
