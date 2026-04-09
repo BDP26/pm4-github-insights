@@ -109,9 +109,12 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+
   # ── GitHub API Producer ────────────────────────────────────────
   producer:
-    build: ./producer
+    build:
+      context: ./producer
+      network: host
     pull_policy: build
     container_name: github-producer
     networks: [github-stream]
@@ -127,7 +130,9 @@ services:
 
   # ── Consumer instances 0-2 (multi-instance mode) ──────
   consumer-0:
-    build: ./consumer
+    build:
+      context: ./consumer
+      network: host
     pull_policy: build
     container_name: github-consumer-0
     networks: [github-stream]
@@ -140,8 +145,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS:    kafka:9092
       GITHUB_TOKEN_USER:          ${GITHUB_TOKEN_USER:-}
       GITHUB_TOKEN_REPO:          ${GITHUB_TOKEN_REPO:-}
-      GITHUB_TOKENS_USER:          ${GITHUB_TOKENS_USER:-}
-      GITHUB_TOKENS_REPO:          ${GITHUB_TOKENS_REPO:-}
+      GITHUB_TOKENS_USER:         ${GITHUB_TOKENS_USER:-}
+      GITHUB_TOKENS_REPO:         ${GITHUB_TOKENS_REPO:-}
       DB_HOST:                    timescaledb
       DB_PORT:                    "5432"
       DB_NAME:                    github_events
@@ -153,7 +158,9 @@ services:
     restart: unless-stopped
 
   consumer-1:
-    build: ./consumer
+    build:
+      context: ./consumer
+      network: host
     pull_policy: build
     container_name: github-consumer-1
     networks: [github-stream]
@@ -166,8 +173,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS:    kafka:9092
       GITHUB_TOKEN_USER:          ${GITHUB_TOKEN_USER:-}
       GITHUB_TOKEN_REPO:          ${GITHUB_TOKEN_REPO:-}
-      GITHUB_TOKENS_USER:          ${GITHUB_TOKENS_USER:-}
-      GITHUB_TOKENS_REPO:          ${GITHUB_TOKENS_REPO:-}
+      GITHUB_TOKENS_USER:         ${GITHUB_TOKENS_USER:-}
+      GITHUB_TOKENS_REPO:         ${GITHUB_TOKENS_REPO:-}
       DB_HOST:                    timescaledb
       DB_PORT:                    "5432"
       DB_NAME:                    github_events
@@ -179,7 +186,9 @@ services:
     restart: unless-stopped
 
   consumer-2:
-    build: ./consumer
+    build:
+      context: ./consumer
+      network: host
     pull_policy: build
     container_name: github-consumer-2
     networks: [github-stream]
@@ -192,8 +201,8 @@ services:
       KAFKA_BOOTSTRAP_SERVERS:    kafka:9092
       GITHUB_TOKEN_USER:          ${GITHUB_TOKEN_USER:-}
       GITHUB_TOKEN_REPO:          ${GITHUB_TOKEN_REPO:-}
-      GITHUB_TOKENS_USER:          ${GITHUB_TOKENS_USER:-}
-      GITHUB_TOKENS_REPO:          ${GITHUB_TOKENS_REPO:-}
+      GITHUB_TOKENS_USER:         ${GITHUB_TOKENS_USER:-}
+      GITHUB_TOKENS_REPO:         ${GITHUB_TOKENS_REPO:-}
       DB_HOST:                    timescaledb
       DB_PORT:                    "5432"
       DB_NAME:                    github_events
@@ -206,7 +215,9 @@ services:
 
   # ── Geocoder ───────────────────────────────────────────────────
   geocoder:
-    build: ./geocoder
+    build:
+      context: ./geocoder
+      network: host
     pull_policy: build
     container_name: geocoder
     networks: [github-stream]
@@ -228,7 +239,9 @@ services:
 
   # ── DB Writer (status + ratelimit topics) ─────────────────────
   db-writer:
-    build: ./db-writer
+    build:
+      context: ./db-writer
+      network: host
     pull_policy: build
     container_name: db-writer
     networks: [github-stream]
@@ -258,7 +271,6 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
-    # HIER WIRD AUF DEN HEALTHCHECK DER DB GEWARTET
     depends_on:
       timescaledb:
         condition: service_healthy
@@ -271,8 +283,8 @@ services:
     networks: [github-stream]
     environment:
       - UPDATE_STRATEGY=PARALLEL
-      - UPDATE_INTERVAL=720h # Check for updates every 30 days
-      - REGION=${PHOTON_REGION:-africa} # Default dev footprint, override with PHOTON_REGION=planet for prod
+      - UPDATE_INTERVAL=720h
+      - REGION=${PHOTON_REGION:-africa}
     volumes:
       - photon_data:/photon/data
     restart: unless-stopped
@@ -282,4 +294,4 @@ services:
       test: ["CMD-SHELL", "curl -fsS 'http://localhost:2322/api?q=zurich&limit=1' >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 200 # Photon can be slow to start, especially on first run when it needs to download and index OSM data. We allow for a long startup time here.
+      retries: 200
