@@ -501,6 +501,10 @@ def _rest_fallback_repo(cur, conn, repo_id: int, full_name: str, pool: "TokenPoo
         return
     if r.status_code == 200:
         _write_repo(cur, conn, repo_id, _rest_repo_to_graphql_shape(r.json()))
+    elif r.status_code == 404:
+        log.info("Repo %s not found (404). Marking as fetched to avoid retries.", full_name)
+        cur.execute("UPDATE repos SET fetched_at = NOW() WHERE repo_id = %s", (repo_id,))
+        conn.commit()
     else:
         log.warning("REST fallback repo %s: %s %s", full_name, r.status_code, r.reason)
         _delete_repo_stub(cur, conn, repo_id)
