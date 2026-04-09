@@ -98,7 +98,7 @@ services:
       - ./db/migrations/002_geocoder_and_ratelimit.sql:/docker-entrypoint-initdb.d/03_migration_002.sql:ro
       - ./db/migrations/003_graphql_logging.sql:/docker-entrypoint-initdb.d/04_migration_003.sql:ro
       - ./db/migrations/004_hidden_gem_functions.sql:/docker-entrypoint-initdb.d/05_migration_004.sql:ro
-      - ./db/migrations/005_geocoder_request_logs.sql:/docker-entrypoint-initdb.d/04_migration_003.sql:ro
+      - ./db/migrations/005_geocoder_request_logs.sql:/docker-entrypoint-initdb.d/06_migration_005.sql:ro
     environment:
       POSTGRES_DB:       github_events
       POSTGRES_USER:     github
