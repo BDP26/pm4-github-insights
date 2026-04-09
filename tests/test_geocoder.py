@@ -1,4 +1,4 @@
-"""Unit tests for geocoder.py — claim pattern and Nominatim parsing."""
+"""Unit tests for geocoder.py — claim pattern and Photon parsing."""
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'geocoder'))
 
@@ -13,25 +13,26 @@ def make_cursor(claimed_row=None):
     return cur
 
 
-def make_nominatim_response(status_code=200, body=None):
+def make_photon_response(status_code=200, body=None):
     r = MagicMock()
     r.status_code = status_code
     r.json.return_value = body or []
     return r
 
 
-# ── parse_nominatim_result ────────────────────────────────────────
+# ── parse_nominatim_result (Photon payload) ───────────────────────
 
 def test_parse_nominatim_result_extracts_country_and_coords():
     from geocoder import parse_nominatim_result
-    data = [{
-        "lat": "37.7749",
-        "lon": "-122.4194",
-        "address": {
-            "country": "United States",
-            "country_code": "us",
-        }
-    }]
+    data = {
+        "features": [{
+            "geometry": {"coordinates": [-122.4194, 37.7749]},
+            "properties": {
+                "country": "United States",
+                "countrycode": "us",
+            },
+        }]
+    }
     result = parse_nominatim_result(data)
     assert result["country"] == "United States"
     assert result["country_code"] == "US"
@@ -39,9 +40,24 @@ def test_parse_nominatim_result_extracts_country_and_coords():
     assert result["lng"] == -122.4194
 
 
-def test_parse_nominatim_result_returns_none_on_empty():
+def test_parse_nominatim_result_returns_none_on_empty_features():
     from geocoder import parse_nominatim_result
-    assert parse_nominatim_result([]) is None
+    data = {"features": []}
+    assert parse_nominatim_result(data) is None
+
+
+def test_parse_nominatim_result_returns_none_on_missing_coordinates():
+    from geocoder import parse_nominatim_result
+    data = {
+        "features": [{
+            "geometry": {"coordinates": []},
+            "properties": {
+                "country": "United States",
+                "countrycode": "us",
+            },
+        }]
+    }
+    assert parse_nominatim_result(data) is None
 
 
 def test_parse_nominatim_result_returns_none_on_none():

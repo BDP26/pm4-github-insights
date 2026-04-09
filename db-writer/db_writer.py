@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 TOPIC_STATUS      = "github.events.status"
 TOPIC_RATELIMIT   = "github.ratelimit"
+TOPIC_GEOCODER    = "geocoder.requests"
 GROUP_ID          = "github-db-writer"
 
 DB_DSN = (
@@ -104,6 +105,44 @@ def handle_ratelimit_message(cur: psycopg2.extensions.cursor, conn: psycopg2.ext
         conn.rollback()
 
 
+def handle_geocoder_message(cur: psycopg2.extensions.cursor, conn: psycopg2.extensions.connection, payload: dict) -> None:
+    """Insert a geocoder_request_logs row from a geocoder.requests message."""
+    try:
+        cur.execute("""
+            INSERT INTO geocoder_request_logs (
+                request_success, sent_at, received_at, elapsed_s,
+                method, url, location_query, status_code, reason,
+                response_bytes, redirects, final_url, http_version, encoding,
+                request_headers, response_headers, error
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s, %s
+            )
+        """, (
+            payload.get("request_success"),
+            payload.get("sent_at"),
+            payload.get("received_at"),
+            payload.get("elapsed_s"),
+            payload.get("method"),
+            payload.get("url"),
+            payload.get("location_query"),
+            payload.get("status_code"),
+            payload.get("reason"),
+            payload.get("response_bytes"),
+            payload.get("redirects"),
+            payload.get("final_url"),
+            payload.get("http_version"),
+            payload.get("encoding"),
+            psycopg2.extras.Json(payload.get("request_headers")),
+            psycopg2.extras.Json(payload.get("response_headers")),
+            payload.get("error"),
+        ))
+        conn.commit()
+    except Exception as e:
+        log.error("Failed to insert geocoder_request_log: %s", e)
+        conn.rollback()
+
+
 def _wait_for_kafka(consumer: Consumer, max_wait_s: int = 60) -> None:
     """Block until the Kafka group coordinator is ready.
 
@@ -138,7 +177,7 @@ def main():
         "auto.offset.reset": "earliest",
         "enable.auto.commit": False,
     })
-    consumer.subscribe([TOPIC_STATUS, TOPIC_RATELIMIT])
+    consumer.subscribe([TOPIC_STATUS, TOPIC_RATELIMIT, TOPIC_GEOCODER])
     _wait_for_kafka(consumer)
 
     _coord_backoff = 1.0
@@ -168,6 +207,8 @@ def main():
                         handle_status_message(cur, conn, payload)
                     elif msg.topic() == TOPIC_RATELIMIT:
                         handle_ratelimit_message(cur, conn, payload)
+                    elif msg.topic() == TOPIC_GEOCODER:
+                        handle_geocoder_message(cur, conn, payload)
                     consumer.commit(message=msg, asynchronous=False)
                 except psycopg2.OperationalError as e:
                     log.error("Database connection error while processing message: %s", e)
@@ -186,7 +227,7 @@ def main():
                 log.info("Forcing Kafka group re-join after NOT_COORDINATOR…")
                 consumer.unsubscribe()
                 _wait_for_kafka(consumer)
-                consumer.subscribe([TOPIC_STATUS, TOPIC_RATELIMIT])
+                consumer.subscribe([TOPIC_STATUS, TOPIC_RATELIMIT, TOPIC_GEOCODER])
             else:
                 _coord_backoff = 1.0
     except KeyboardInterrupt:
