@@ -1,0 +1,279 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Hidden Gem",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "github_events_db"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineWidth": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "barRadius": 0,
+        "barWidth": 0.97,
+        "colorByField": "repository_name",
+        "fullHighlight": false,
+        "groupWidth": 0.7,
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "orientation": "auto",
+        "showValue": "auto",
+        "stacking": "normal",
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        },
+        "xTickLabelRotation": -15,
+        "xTickLabelSpacing": 0
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "github_events",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "\n\nWITH\n  config AS ( \n    SELECT\n      date_trunc('minute', NOW())::timestamp AS ts_now,  -- round to minute\n      INTERVAL '${hours} hours' AS time_window,\n      1000                AS top_n,\n      5                   AS min_stars,\n      1                   AS min_forks,\n      ${alpha}::FLOAT        AS alpha,\n      ${beta}::FLOAT         AS beta     \n  ),\n  \n  repo_events AS (\n    SELECT\n        e.repo_id,\n        sum(case when detail ='starred' then 1 else 0 end) as count_stars_interval,\n        sum(case when detail like 'forked%' then 1 else 0 end) as count_forks_interval\n    FROM events e, config cfg\n      WHERE e.time >= cfg.ts_now - cfg.time_window\n      GROUP BY e.repo_id\n      ORDER BY count_stars_interval DESC, count_forks_interval DESC\n      LIMIT (SELECT top_n FROM config)\n  ),\n  repo_baseline AS ( \n    SELECT \n        r.name,\n        r.full_name,\n        e.repo_id,\n        r.created_at,\n        sum(case when e.detail ='starred' then 1 else 0 end) AS count_stars_all,\n        sum(case when e.detail like 'forked%' then 1 else 0 end) AS count_forks_all,\n        r.forks_count AS init_forks,\n        r.stargazers_count AS init_stars\n    FROM events e\n    JOIN repos r ON r.repo_id = e.repo_id\n    WHERE e.repo_id IN (SELECT repo_id FROM repo_events)\n    GROUP BY e.repo_id, r.forks_count, r.stargazers_count, r.name, r.full_name, r.created_at\n  ),\n \nrepo_overview AS (\n    SELECT\n      re.repo_id,\n      rb.name,\n      rb.full_name,\n      rb.created_at,\n      re.count_stars_interval,\n      re.count_forks_interval,\n      (rb.count_stars_all + rb.init_stars) AS total_stars,\n      -- Actual baseline BEFORE the window: total minus what happened in the window\n      (rb.init_stars + rb.count_stars_all - re.count_stars_interval) AS baseline_stars,\n      (rb.init_forks + rb.count_forks_all - re.count_forks_interval) AS baseline_forks,\n      (rb.count_forks_all + rb.init_forks) AS total_forks,\n      rb.count_forks_all AS count_forks_all,\n      rb.count_stars_all AS count_stars_all,\n      EXTRACT(EPOCH FROM (SELECT ts_now FROM config) - rb.created_at::timestamp) / 3600 AS repo_age_hours\n    FROM repo_events re\n    JOIN repo_baseline rb ON rb.repo_id = re.repo_id\n    ORDER BY re.count_stars_interval DESC, re.count_forks_interval DESC\n),\n\n  hidden_gem_calc AS (\n    SELECT \n      ro.repo_id,\n      ro.name,\n      ro.full_name,\n      ro.count_stars_interval,\n      ro.count_forks_interval,\n      ro.baseline_stars,\n      ro.baseline_forks,\n      ro.total_stars,\n      ro.total_forks,\n      ro.repo_age_hours,\n      calc_lambda(\n          cfg.alpha, cfg.beta,\n          ro.baseline_stars::INT, ro.baseline_forks::INT,\n          ro.count_stars_interval::INT, ro.count_forks_interval::INT,\n          GREATEST(ro.repo_age_hours::FLOAT, 1.0),  -- safety clamp\n          cfg.time_window\n      ) AS lambda\n    FROM repo_overview ro, config cfg\n  ),\n\n  repo_hidden_gem_overview AS (\n    SELECT \n      hc.repo_id,\n      hc.name , \n      hc.full_name,\n      hc.count_stars_interval,\n      hc.count_forks_interval,\n      hc.baseline_stars,\n      hc.baseline_forks,\n      hc.total_stars,\n      hc.total_forks,\n      hc.repo_age_hours,\n      hc.lambda,\n      scores.poisson_cdf,\n      scores.sig_score\n    FROM hidden_gem_calc hc, config cfg,\n    LATERAL calc_rising_star_scores(\n        numb_stars_forks        := (cfg.alpha * hc.count_stars_interval::FLOAT + cfg.beta * hc.count_forks_interval::FLOAT)::INT,\n        lambda                  := hc.lambda,\n        count_stars_in_interval := hc.count_stars_interval::INT,\n        count_forks_in_interval := hc.count_forks_interval::INT,\n        min_stars               := cfg.min_stars,\n        min_forks               := cfg.min_forks\n  ) AS scores     \n  )\n  \n\n\nSELECT full_name AS repository_path, sig_score AS significance_score FROM repo_hidden_gem_overview ORDER BY sig_score DESC NULLS LAST LIMIT 10;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Trending repos",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "github_events_db"
+      },
+      "description": "Poisson CDF — P(X < x_t): The probability that a repository receives fewer stars/forks than actually observed, given its normal rate. The closer to 1, the more unusual the surge.\n\nSig Score — -ln(1 - CDF): Log-transformed p-value. Measures how strongly the observed surge deviates from the expected rate. A score ≥ 3 corresponds to roughly 95% significance, meaning: \"With 95% confidence, this surge is not due to chance.\"",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "decimals": 16,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "sig_score"
+          }
+        ]
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "github_events",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "github_events_db"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "\n\nWITH\n  config AS ( \n    SELECT\n      date_trunc('minute', NOW())::timestamp AS ts_now,  -- round to minute\n      INTERVAL '${hours} hours' AS time_window,\n      1000                AS top_n,\n      5                   AS min_stars,\n      1                   AS min_forks,\n      ${alpha}::FLOAT        AS alpha,\n      ${beta}::FLOAT         AS beta     \n  ),\n  \n  repo_events AS (\n    SELECT\n        e.repo_id,\n        sum(case when detail ='starred' then 1 else 0 end) as count_stars_interval,\n        sum(case when detail like 'forked%' then 1 else 0 end) as count_forks_interval\n    FROM events e, config cfg\n      WHERE e.time >= cfg.ts_now - cfg.time_window\n      GROUP BY e.repo_id\n      ORDER BY count_stars_interval DESC, count_forks_interval DESC\n      LIMIT (SELECT top_n FROM config)\n  ),\n  repo_baseline AS ( \n    SELECT \n        r.name,\n        r.full_name,\n        e.repo_id,\n        r.created_at,\n        sum(case when e.detail ='starred' then 1 else 0 end) AS count_stars_all,\n        sum(case when e.detail like 'forked%' then 1 else 0 end) AS count_forks_all,\n        r.forks_count AS init_forks,\n        r.stargazers_count AS init_stars\n    FROM events e\n    JOIN repos r ON r.repo_id = e.repo_id\n    WHERE e.repo_id IN (SELECT repo_id FROM repo_events)\n    GROUP BY e.repo_id, r.forks_count, r.stargazers_count, r.name, r.full_name, r.created_at\n  ),\n \nrepo_overview AS (\n    SELECT\n      re.repo_id,\n      rb.name,\n      rb.full_name,\n      rb.created_at,\n      re.count_stars_interval,\n      re.count_forks_interval,\n      (rb.count_stars_all + rb.init_stars) AS total_stars,\n      -- Actual baseline BEFORE the window: total minus what happened in the window\n      (rb.init_stars + rb.count_stars_all - re.count_stars_interval) AS baseline_stars,\n      (rb.init_forks + rb.count_forks_all - re.count_forks_interval) AS baseline_forks,\n      (rb.count_forks_all + rb.init_forks) AS total_forks,\n      rb.count_forks_all AS count_forks_all,\n      rb.count_stars_all AS count_stars_all,\n      EXTRACT(EPOCH FROM (SELECT ts_now FROM config) - rb.created_at::timestamp) / 3600 AS repo_age_hours\n    FROM repo_events re\n    JOIN repo_baseline rb ON rb.repo_id = re.repo_id\n    ORDER BY re.count_stars_interval DESC, re.count_forks_interval DESC\n),\n\n  hidden_gem_calc AS (\n    SELECT \n      ro.repo_id,\n      ro.name,\n      ro.full_name,\n      ro.count_stars_interval,\n      ro.count_forks_interval,\n      ro.baseline_stars,\n      ro.baseline_forks,\n      ro.total_stars,\n      ro.total_forks,\n      ro.repo_age_hours,\n      calc_lambda(\n          cfg.alpha, cfg.beta,\n          ro.baseline_stars::INT, ro.baseline_forks::INT,\n          ro.count_stars_interval::INT, ro.count_forks_interval::INT,\n          GREATEST(ro.repo_age_hours::FLOAT, 1.0),  -- safety clamp\n          cfg.time_window\n      ) AS lambda\n    FROM repo_overview ro, config cfg\n  ),\n\n  repo_hidden_gem_overview AS (\n    SELECT \n      hc.repo_id,\n      hc.name , \n      hc.full_name,\n      hc.count_stars_interval,\n      hc.count_forks_interval,\n      hc.baseline_stars,\n      hc.baseline_forks,\n      hc.total_stars,\n      hc.total_forks,\n      hc.repo_age_hours,\n      hc.lambda,\n      scores.poisson_cdf,\n      scores.sig_score\n    FROM hidden_gem_calc hc, config cfg,\n    LATERAL calc_rising_star_scores(\n        numb_stars_forks        := (cfg.alpha * hc.count_stars_interval::FLOAT + cfg.beta * hc.count_forks_interval::FLOAT)::INT,\n        lambda                  := hc.lambda,\n        count_stars_in_interval := hc.count_stars_interval::INT,\n        count_forks_in_interval := hc.count_forks_interval::INT,\n        min_stars               := cfg.min_stars,\n        min_forks               := cfg.min_forks\n  ) AS scores     \n  )\n  \n\n\nSELECT repo_id::TEXT, name AS Repository_nname, full_name AS repository_path, poisson_cdf, sig_score AS significance_score FROM repo_hidden_gem_overview ORDER BY sig_score DESC NULLS LAST;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Repositories with Statistically Significant Growth",
+      "type": "table"
+    }
+  ],
+  "preload": false,
+  "schemaVersion": 42,
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "1.0",
+          "value": "1.0"
+        },
+        "description": "weight stars",
+        "name": "alpha",
+        "options": [],
+        "query": "0.5, 0.75, 1.0, 1.25, 1.5, 2.0",
+        "type": "custom",
+        "valuesFormat": "csv"
+      },
+      {
+        "current": {
+          "text": "1.0",
+          "value": "1.0"
+        },
+        "description": "weight forks",
+        "name": "beta",
+        "options": [],
+        "query": "0.5, 0.75, 1.0, 1.25, 1.5, 2.0",
+        "type": "custom",
+        "valuesFormat": "csv"
+      },
+      {
+        "current": {
+          "text": "96",
+          "value": "96"
+        },
+        "description": "Timeframe of interest (last x hours)",
+        "label": "Timeframe",
+        "name": "hours",
+        "options": [],
+        "query": "1, 2, 6, 12, 24, 48, 72, 96",
+        "type": "custom",
+        "valuesFormat": "csv"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Hidden Gem",
+  "uid": "adj2x5m",
+  "version": 1,
+  "weekStart": ""
+}

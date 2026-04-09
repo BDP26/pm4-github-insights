@@ -1,0 +1,30 @@
+graph LR
+    %% Definition der Styles
+    classDef source fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef streaming fill:#69f,stroke:#333,stroke-width:2px;
+    classDef enrichment fill:#ff9,stroke:#333,stroke-width:2px;
+    classDef storage fill:#9f9,stroke:#333,stroke-width:2px;
+
+    %% Komponenten
+    Source[("Datenquelle")]:::source
+    Prod["Producer"]:::source
+
+    subgraph Kafka_Cluster ["Event Streaming"]
+        Kafka["Kafka Topic"]:::streaming
+    end
+
+    Cons["Consumer"]:::streaming
+
+    subgraph External ["Enrichment"]
+        Photon["Nominatim Geocoder"]:::enrichment
+    end
+
+    DB[("Datenbank")]:::storage
+
+    %% Datenfluss
+    Source -->|Rohdaten| Prod
+    Prod -->|Publish| Kafka
+    Kafka -->|Subscribe| Cons
+
+    Cons <-->|Request/Response| Photon
+    Cons -->|Store enriched Data| DB
