@@ -88,6 +88,65 @@ def test_ratelimit_message_stores_correct_remaining():
     assert 4900 in params, f"remaining=4900 must be in INSERT params, got: {params}"
 
 
+# ── geocoder.requests → geocoder_request_logs ──────────────────────
+
+def test_geocoder_message_inserts_into_geocoder_request_logs():
+    from db_writer import handle_geocoder_message
+    cur = make_cursor()
+    conn = make_conn()
+    payload = {
+        "request_success": True,
+        "sent_at": "2026-04-05T09:10:00+00:00",
+        "received_at": "2026-04-05T09:10:00+00:00",
+        "elapsed_s": 0.12,
+        "method": "GET",
+        "url": "http://photon:2322/api?q=zurich&limit=1",
+        "location_query": "Zurich",
+        "status_code": 200,
+        "reason": "OK",
+        "response_bytes": 321,
+        "redirects": 0,
+        "final_url": "http://photon:2322/api?q=zurich&limit=1",
+        "http_version": 11,
+        "encoding": "utf-8",
+        "request_headers": {},
+        "response_headers": {},
+        "error": None,
+    }
+    handle_geocoder_message(cur, conn, payload)
+    sql_calls = [str(c) for c in cur.execute.call_args_list]
+    assert any("INSERT INTO geocoder_request_logs" in s for s in sql_calls)
+    conn.commit.assert_called_once()
+
+
+def test_geocoder_message_rollback_on_db_error():
+    from db_writer import handle_geocoder_message
+    cur = make_cursor()
+    conn = make_conn()
+    cur.execute.side_effect = Exception("DB error")
+    payload = {
+        "request_success": True,
+        "sent_at": "2026-04-05T09:10:00+00:00",
+        "received_at": "2026-04-05T09:10:00+00:00",
+        "elapsed_s": 0.1,
+        "method": "GET",
+        "url": "x",
+        "location_query": "x",
+        "status_code": 200,
+        "reason": "OK",
+        "response_bytes": 0,
+        "redirects": 0,
+        "final_url": "x",
+        "http_version": 11,
+        "encoding": "utf-8",
+        "request_headers": {},
+        "response_headers": {},
+        "error": None,
+    }
+    handle_geocoder_message(cur, conn, payload)  # must not raise
+    conn.rollback.assert_called_once()
+
+
 # ── error handling ────────────────────────────────────────────────
 
 def test_status_message_rollback_on_db_error():

@@ -10,7 +10,8 @@
 
 set -euo pipefail
 
-PROFILE="multi-consumer"
+PROFILE="${1:-Prod}"
+PHOTON_REGION="planet"
 
 # Docker Compose names volumes as <project>_<volume_name>.
 # The project name is the lowercase directory name (Compose default).
@@ -50,14 +51,15 @@ fi
 
 # ── 4. Rebuild with no cache ─────────────────────────────────────────────────
 info "Building images (--no-cache)..."
-docker compose --profile "$PROFILE" build --no-cache
+PHOTON_REGION="$PHOTON_REGION" docker compose --profile "$PROFILE" build --no-cache
 
 # ── 5. Start the stack ───────────────────────────────────────────────────────
 info "Starting stack..."
-docker compose --profile "$PROFILE" up -d
+PHOTON_REGION="$PHOTON_REGION" docker compose --profile "$PROFILE" up -d
 
 info "Done."
 echo ""
 echo "  Follow all logs:      docker compose --profile $PROFILE logs -f"
 echo "  Follow consumer logs: docker logs -f github-consumer-0"
 echo "  Kafka UI:             http://localhost:8080"
+echo "  Photon region:        $PHOTON_REGION"
