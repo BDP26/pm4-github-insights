@@ -776,8 +776,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "DE_DB-Status",
-  "uid": "adxqpvr",
+  "title": "DE_DB-geocoder_request_logs-Status",
+  "uid": "adxqpvr2",
   "version": 1,
   "weekStart": ""
 }
