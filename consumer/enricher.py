@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 # ── Constants ────────────────────────────────────────────────────
 GRAPHQL_BATCH_SIZE = 20
-BATCH_FLUSH_INTERVAL_S = 2.0
+BATCH_FLUSH_INTERVAL_S = 10.0
 GRAPHQL_ENDPOINT = "https://api.github.com/graphql"
 TOPIC_STATUS = "github.events.status"
 TOPIC_RATELIMIT = "github.ratelimit"
