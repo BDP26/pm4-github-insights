@@ -163,7 +163,13 @@ def _write_user(cur, conn, username: str, node: dict) -> None:
             INSERT INTO organizations
                 (login, fetched_at, name, description, location, public_repos, created_at)
             VALUES (%s, NOW(), %s, %s, %s, %s, %s)
-            ON CONFLICT DO NOTHING
+            ON CONFLICT (login) DO UPDATE SET
+                fetched_at   = NOW(),
+                name         = EXCLUDED.name,
+                description  = EXCLUDED.description,
+                location     = EXCLUDED.location,
+                public_repos = EXCLUDED.public_repos,
+                created_at   = EXCLUDED.created_at
         """, (
             node.get("login", username),
             node.get("name"),

@@ -242,28 +242,27 @@ def main():
                     # Stage 2: Queue enrichment
                     enricher.add_user(actor)
                     enricher.add_repo(repo_id, repo_name)
+                    # Proactively enrich repo owner via user_pool — works for orgs too,
+                    # because build_user_query uses repositoryOwner which returns
+                    # Organization typename when appropriate.
+                    if repo_name and "/" in repo_name:
+                        enricher.add_user(repo_name.split("/", 1)[0])
 
-                    # Stage 3: Org membership (best-effort; requires org already enriched)
-                    cur.execute(
-                        "SELECT owner_login, owner_type FROM repos WHERE repo_id = %s", (repo_id,)
-                    )
-                    res = cur.fetchone()
-                    if res:
-                        owner_login, owner_type = res
-                        if owner_type == "Organization":
-                            enricher.add_user(owner_login)
-                            # Flush now so the org row is available for the membership check
-                            enricher.flush(force=True)
-                            cur.execute(
-                                "SELECT 1 FROM organizations WHERE login = %s AND fetched_at IS NOT NULL",
-                                (owner_login,),
-                            )
-                            if cur.fetchone() and _is_non_bot_user(cur, actor):
-                                cur.execute("""
-                                    INSERT INTO organization_members (org_login, user_username, role)
-                                    VALUES (%s, %s, 'contributor') ON CONFLICT DO NOTHING
-                                """, (owner_login, actor))
-                                conn.commit()
+                    # Stage 3: Org membership (best-effort)
+                    # Only insert when the org is already fully enriched; the proactive
+                    # add_user above ensures it eventually will be.
+                    if repo_name and "/" in repo_name:
+                        owner_login = repo_name.split("/", 1)[0]
+                        cur.execute(
+                            "SELECT 1 FROM organizations WHERE login = %s AND fetched_at IS NOT NULL",
+                            (owner_login,),
+                        )
+                        if cur.fetchone() and _is_non_bot_user(cur, actor):
+                            cur.execute("""
+                                INSERT INTO organization_members (org_login, user_username, role)
+                                VALUES (%s, %s, 'contributor') ON CONFLICT DO NOTHING
+                            """, (owner_login, actor))
+                            conn.commit()
 
                 except Exception as e:
                     conn.rollback()
