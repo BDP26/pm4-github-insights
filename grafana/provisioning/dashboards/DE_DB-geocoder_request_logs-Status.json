@@ -28,17 +28,41 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
           },
           "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
             },
-            "footer": {
-              "reducers": []
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
             },
-            "inspect": false
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "thresholds": {
@@ -65,57 +89,43 @@
               "id": "byName",
               "options": "Restliche Requests"
             },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 166
-              }
-            ]
+            "properties": []
           },
           {
             "matcher": {
               "id": "byName",
               "options": "Limit"
             },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 110
-              }
-            ]
+            "properties": []
           },
           {
             "matcher": {
               "id": "byName",
               "options": "Verbrauchte Requests"
             },
-            "properties": [
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "mode": "lcd",
-                  "type": "gauge",
-                  "valueDisplayMode": "text"
-                }
-              },
-              {
-                "id": "custom.width",
-                "value": 311
-              }
-            ]
+            "properties": []
           }
         ]
       },
       "gridPos": {
-        "h": 6,
+        "h": 7,
         "w": 18,
         "x": 0,
         "y": 0
       },
       "id": 9,
       "options": {
-        "cellHeight": "sm",
-        "showHeader": true
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "pluginVersion": "12.4.2",
       "targets": [
@@ -124,7 +134,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH last_logs AS (\n  -- Wir greifen uns nur die absolut letzten 1000 Zeilen. \n  -- Dank Index auf sent_at oder id geht das in Millisekunden.\n  SELECT * FROM request_logs \n  WHERE sent_at IS NOT NULL\n  ORDER BY sent_at DESC \n  LIMIT 15000\n)\nSELECT DISTINCT ON (bereich)\n  bereich AS \"API Key\",\n  verbraucht AS \"Verbrauchte Requests\",\n  restlich AS \"Restliche Requests\",\n  TO_TIMESTAMP(reset_timestamp) AS \"Neue Requests\"\nFROM (\n  SELECT \n    CASE \n      WHEN url LIKE '%/events%' THEN '1. Events (Producer)'\n      WHEN url LIKE '%/users/%' THEN '2. Users (Consumer)'\n      WHEN url LIKE '%/repos/%' THEN '3. Repos (Consumer)'\n      ELSE 'Andere'\n    END AS bereich,\n    (response_headers::json->>'X-RateLimit-Used')::int AS verbraucht,\n    (response_headers::json->>'X-RateLimit-Remaining')::int AS restlich,\n    (response_headers::json->>'X-RateLimit-Reset')::bigint AS reset_timestamp,\n    sent_at\n  FROM last_logs\n) sub\nWHERE bereich != 'Andere'\nORDER BY bereich, sent_at DESC;",
+          "rawSql": "SELECT\n  date_trunc('minute', recorded_at) AS \"time\",\n  COUNT(*)                          AS requests\nFROM geocoder_request_logs\nWHERE $__timeFilter(recorded_at)\nGROUP BY 1\nORDER BY 1;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -145,8 +155,8 @@
           }
         }
       ],
-      "title": "API-Request Overview",
-      "type": "table"
+      "title": "API-Requests",
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -173,7 +183,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
+        "h": 7,
         "w": 6,
         "x": 18,
         "y": 0
@@ -203,7 +213,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT \n  avg(elapsed_s) as \"Avg Latency\"\nFROM request_logs\nWHERE $__timeFilter(received_at);",
+          "rawSql": "SELECT \n  avg(elapsed_s) as \"Avg Latency\"\nFROM geocoder_request_logs\nWHERE $__timeFilter(received_at);",
           "refId": "A",
           "sql": {
             "columns": [
@@ -237,85 +247,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": 0
-              }
-            ]
-          },
-          "unit": "decmbytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 4
-      },
-      "id": 7,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "12.4.2",
-      "targets": [
-        {
-          "dataset": "github_events",
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT \n  sum(response_bytes) / 1024.0 / 1024.0 as \"MB\"\nFROM request_logs\n-- Nimmt genau die letzten 60 Minuten ab jetzt\nWHERE received_at >= now() - interval '1 hour'\n  AND response_headers IS NOT NULL;",
-          "refId": "A",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          }
-        }
-      ],
-      "title": "Data throughput per hour",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "grafana-postgresql-datasource",
-        "uid": "github_events_db"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
           "custom": {
             "align": "auto",
             "cellOptions": {
@@ -341,98 +272,31 @@
             ]
           }
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Letzter Limit-Hit"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "dateTimeFromNow"
-              },
-              {
-                "id": "custom.width",
-                "value": 174
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Beispiel-URL (Letzter Fail)"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 203
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Pfad (Letzter Fail)"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 317
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "API Key"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 191
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Status"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 119
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
-        "h": 6,
+        "h": 8,
         "w": 18,
         "x": 0,
-        "y": 6
+        "y": 7
       },
       "id": 11,
       "options": {
         "cellHeight": "sm",
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": false,
-            "displayName": "API Key"
-          }
-        ]
+        "showHeader": true
       },
       "pluginVersion": "12.4.2",
       "targets": [
         {
           "dataset": "github_events",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "github_events_db"
+          },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT DISTINCT ON (bereich)\n  bereich AS \"API Key\",\n  sent_at AS \"Letzter Limit-Hit\",\n  -- Hier ersetzen wir die Basis-URL durch [...]\n  REPLACE(url, 'https://api.github.com', '[...]') AS \"Pfad (Letzter Fail)\",\n  status_code AS \"Status\"\nFROM (\n  SELECT \n    CASE \n      WHEN url LIKE '%/events%' THEN '1. Events (Producer)'\n      WHEN url LIKE '%/users/%' THEN '2. Users (Consumer)'\n      WHEN url LIKE '%/repos/%' THEN '3. Repos (Consumer)'\n      ELSE 'Andere'\n    END AS bereich,\n    sent_at,\n    url,\n    status_code\n  FROM request_logs\n  WHERE \n    ((response_headers::json->>'X-RateLimit-Remaining')::int = 0 OR status_code = 403)\n    AND sent_at > NOW() - INTERVAL '7 days'\n  ORDER BY sent_at DESC\n) sub\nWHERE bereich != 'Andere'\nORDER BY bereich, sent_at DESC;",
+          "rawSql": "SELECT\n  recorded_at                        AS \"recorded at\",\n  location_query                     AS location,\n  ROUND(elapsed_s::numeric, 3)       AS \"elapsed (s)\",\n  status_code,\n  response_bytes                     AS \"bytes\",\n  request_success                    AS success\nFROM geocoder_request_logs\nORDER BY recorded_at DESC\nLIMIT 50;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -453,7 +317,7 @@
           }
         }
       ],
-      "title": "Last rate limit hit",
+      "title": "New panel",
       "type": "table"
     },
     {
@@ -482,10 +346,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
+        "h": 7,
         "w": 6,
-        "x": 18,
-        "y": 8
+        "x": 0,
+        "y": 15
       },
       "id": 10,
       "options": {
@@ -510,7 +374,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  -- Wir casten die Grafana-Variablen explizit zu 'timestamptz'\n  COUNT(*)::float / (EXTRACT(EPOCH FROM ($__timeTo()::timestamptz - $__timeFrom()::timestamptz)) / 60) AS \"req_per_min\"\nFROM request_logs\nWHERE $__timeFilter(received_at)\n  AND response_headers IS NOT NULL;",
+          "rawSql": "SELECT\n  -- Wir casten die Grafana-Variablen explizit zu 'timestamptz'\n  COUNT(*)::float / (EXTRACT(EPOCH FROM ($__timeTo()::timestamptz - $__timeFrom()::timestamptz)) / 60) AS \"req_per_min\"\nFROM geocoder_request_logs\nWHERE $__timeFilter(received_at)\n  AND response_headers IS NOT NULL;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -542,90 +406,54 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "stepAfter",
-            "lineStyle": {
-              "fill": "solid"
-            },
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
+            "mode": "thresholds"
           },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
-          }
+          },
+          "unit": "decmbytes"
         },
         "overrides": []
       },
       "gridPos": {
         "h": 7,
-        "w": 18,
-        "x": 0,
-        "y": 12
+        "w": 6,
+        "x": 6,
+        "y": 15
       },
-      "id": 5,
+      "id": 7,
       "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
       "pluginVersion": "12.4.2",
       "targets": [
         {
           "dataset": "github_events",
           "editorMode": "code",
-          "format": "time_series",
+          "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  $__timeGroupAlias(received_at, 1m), -- Gruppiert die Daten pro Minute\n  CASE \n    WHEN url LIKE '%/events%' THEN 'Events-Key'\n    WHEN url LIKE '%/users/%' THEN 'User-Key'\n    WHEN url LIKE '%/repos/%' THEN 'Repo-Key'\n    ELSE 'Other'\n  END AS metric,\n  MAX((response_headers::json->>'X-RateLimit-Used')::int) AS \"Used\"\nFROM request_logs\nWHERE $__timeFilter(received_at)\n  AND response_headers IS NOT NULL\nGROUP BY 1, 2\nORDER BY 1;",
+          "rawSql": "SELECT \n  sum(response_bytes) / 1024.0 / 1024.0 as \"MB\"\nFROM geocoder_request_logs\n-- Nimmt genau die letzten 60 Minuten ab jetzt\nWHERE received_at >= now() - interval '1 hour'\n  AND response_headers IS NOT NULL;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -646,8 +474,8 @@
           }
         }
       ],
-      "title": "Total Requests per Key",
-      "type": "timeseries"
+      "title": "Data throughput per hour",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -703,8 +531,8 @@
       "gridPos": {
         "h": 7,
         "w": 6,
-        "x": 18,
-        "y": 12
+        "x": 12,
+        "y": 15
       },
       "id": 8,
       "options": {
@@ -738,7 +566,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT \n  status_code AS \"Status\",\n  error AS \"Fehlermeldung\",\n  count(*) AS \"Häufigkeit\",\n  min(received_at) AS \"Zuerst aufgetreten\",\n  max(received_at) AS \"Zuletzt aufgetreten\"\nFROM request_logs\nWHERE request_success = false\n  AND $__timeFilter(received_at)\nGROUP BY 1, 2\nORDER BY 3 DESC\nLIMIT 5;",
+          "rawSql": "SELECT \n  status_code AS \"Status\",\n  error AS \"Fehlermeldung\",\n  count(*) AS \"Häufigkeit\",\n  min(received_at) AS \"Zuerst aufgetreten\",\n  max(received_at) AS \"Zuletzt aufgetreten\"\nFROM geocoder_request_logs\nWHERE request_success = false\n  AND $__timeFilter(received_at)\nGROUP BY 1, 2\nORDER BY 3 DESC\nLIMIT 5;",
           "refId": "A",
           "sql": {
             "columns": [
