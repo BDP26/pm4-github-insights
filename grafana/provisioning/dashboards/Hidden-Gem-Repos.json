@@ -1,0 +1,130 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Hidden Gem - Drill-Down by language/license/topic",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [
+    {"title": "Overview", "type": "link", "url": "/d/adj2x5m",          "keepTime": true, "includeVars": true, "targetBlank": false, "asDropdown": false, "tags": [], "tooltip": "", "icon": "external link"},
+    {"title": "Users",    "type": "link", "url": "/d/hidden-gem-users", "keepTime": true, "includeVars": true, "targetBlank": false, "asDropdown": false, "tags": [], "tooltip": "", "icon": "external link"},
+    {"title": "Orgs",     "type": "link", "url": "/d/hidden-gem-orgs",  "keepTime": true, "includeVars": true, "targetBlank": false, "asDropdown": false, "tags": [], "tooltip": "", "icon": "external link"}
+  ],
+  "panels": [
+    {
+      "type": "text",
+      "id": 99,
+      "gridPos": {"h": 2, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "**Window:** last ${hours}h \u00b7 **alpha:** ${alpha} \u00b7 **beta:** ${beta} \u00b7 **language:** ${language} \u00b7 **license:** ${license} \u00b7 **topic:** ${topic}"
+      },
+      "title": "Context"
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"fillOpacity": 80, "lineWidth": 1, "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "gradientMode": "none", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "scaleDistribution": {"type": "linear"}, "thresholdsStyle": {"mode": "off"}},
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": 0}, {"color": "red", "value": 80}]}
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 2},
+      "id": 2,
+      "options": {
+        "barRadius": 0,
+        "barWidth": 0.97,
+        "colorByField": "repository_name",
+        "fullHighlight": false,
+        "groupWidth": 0.7,
+        "legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true},
+        "orientation": "auto",
+        "showValue": "auto",
+        "stacking": "normal",
+        "tooltip": {"hideZeros": false, "mode": "single", "sort": "none"},
+        "xTickLabelRotation": -15,
+        "xTickLabelSpacing": 0
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "github_events",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT full_name AS repository_path, sig_score AS significance_score FROM hidden_gem_repo_scores(${alpha}::float, ${beta}::float, ${hours}::int, ARRAY[${language:sqlstring}]::text[], ARRAY[${license:sqlstring}]::text[], ARRAY[${topic:sqlstring}]::text[]) WHERE sig_score IS NOT NULL ORDER BY sig_score DESC NULLS LAST LIMIT 10;",
+          "refId": "A",
+          "sql": {"columns": [{"parameters": [], "type": "function"}], "groupBy": [{"property": {"type": "string"}, "type": "groupBy"}], "limit": 50}
+        }
+      ],
+      "title": "Trending repos (filtered)",
+      "type": "barchart"
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"},
+      "description": "Poisson CDF and Sig Score for filtered repositories.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "custom": {"align": "auto", "cellOptions": {"type": "auto"}, "footer": {"reducers": []}, "inspect": false},
+          "decimals": 4,
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": 0}, {"color": "red", "value": 80}]}
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 2},
+      "id": 1,
+      "options": {"cellHeight": "sm", "showHeader": true, "sortBy": [{"desc": true, "displayName": "significance_score"}]},
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "github_events",
+          "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"},
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT repo_id::text, name AS repository_name, full_name AS repository_path, language, license_spdx, count_stars_interval, count_forks_interval, poisson_cdf, sig_score AS significance_score, last_event_in_window FROM hidden_gem_repo_scores(${alpha}::float, ${beta}::float, ${hours}::int, ARRAY[${language:sqlstring}]::text[], ARRAY[${license:sqlstring}]::text[], ARRAY[${topic:sqlstring}]::text[]) WHERE sig_score IS NOT NULL ORDER BY sig_score DESC NULLS LAST;",
+          "refId": "A",
+          "sql": {"columns": [{"parameters": [], "type": "function"}], "groupBy": [{"property": {"type": "string"}, "type": "groupBy"}], "limit": 50}
+        }
+      ],
+      "title": "Repositories with Statistically Significant Growth (filtered)",
+      "type": "table"
+    }
+  ],
+  "preload": false,
+  "schemaVersion": 42,
+  "tags": ["hidden-gem", "drill-down"],
+  "templating": {
+    "list": [
+      {"current": {"text": "1.0", "value": "1.0"}, "description": "weight stars", "name": "alpha", "options": [], "query": "0.5, 0.75, 1.0, 1.25, 1.5, 2.0", "type": "custom", "valuesFormat": "csv"},
+      {"current": {"text": "1.0", "value": "1.0"}, "description": "weight forks", "name": "beta",  "options": [], "query": "0.5, 0.75, 1.0, 1.25, 1.5, 2.0", "type": "custom", "valuesFormat": "csv"},
+      {"current": {"text": "96",  "value": "96"},  "description": "Timeframe (last X hours)", "label": "Timeframe", "name": "hours", "options": [], "query": "1, 2, 6, 12, 24, 48, 72, 96", "type": "custom", "valuesFormat": "csv"},
+      {"name": "language", "label": "Language", "type": "query", "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"}, "query": "SELECT value FROM v_repo_languages ORDER BY 1", "definition": "SELECT value FROM v_repo_languages ORDER BY 1", "multi": true, "includeAll": true, "allValue": null, "refresh": 1, "sort": 1, "current": {"text": ["All"], "value": ["$__all"]}, "options": []},
+      {"name": "license",  "label": "License",  "type": "query", "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"}, "query": "SELECT value FROM v_repo_licenses ORDER BY 1",  "definition": "SELECT value FROM v_repo_licenses ORDER BY 1",  "multi": true, "includeAll": true, "allValue": null, "refresh": 1, "sort": 1, "current": {"text": ["All"], "value": ["$__all"]}, "options": []},
+      {"name": "topic",    "label": "Topic",    "type": "query", "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"}, "query": "SELECT value FROM v_repo_topics ORDER BY 1",    "definition": "SELECT value FROM v_repo_topics ORDER BY 1",    "multi": true, "includeAll": true, "allValue": null, "refresh": 1, "sort": 1, "current": {"text": ["All"], "value": ["$__all"]}, "options": []}
+    ]
+  },
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Hidden Gem - Repos (Drill-Down)",
+  "uid": "hidden-gem-repos",
+  "version": 1,
+  "weekStart": ""
+}

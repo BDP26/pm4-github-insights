@@ -1,0 +1,170 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Hidden Gem - Organizations ranked by org-owned and member-owned repo scores",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [
+    {"title": "Overview", "type": "link", "url": "/d/adj2x5m",          "keepTime": true, "includeVars": true, "targetBlank": false, "asDropdown": false, "tags": [], "tooltip": "", "icon": "external link"},
+    {"title": "Repos",    "type": "link", "url": "/d/hidden-gem-repos", "keepTime": true, "includeVars": true, "targetBlank": false, "asDropdown": false, "tags": [], "tooltip": "", "icon": "external link"},
+    {"title": "Users",    "type": "link", "url": "/d/hidden-gem-users", "keepTime": true, "includeVars": true, "targetBlank": false, "asDropdown": false, "tags": [], "tooltip": "", "icon": "external link"}
+  ],
+  "panels": [
+    {
+      "type": "text",
+      "id": 99,
+      "gridPos": {"h": 2, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "**Window:** last ${hours}h \u00b7 `org_*` columns aggregate repos where the organization itself is owner. `member_*` columns aggregate repos owned by the org's members (from `organization_members`). Both are computed over the same window and filter set. \u00b7 Filters: lang=${language}, license=${license}, topic=${topic}"
+      },
+      "title": "Context"
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"fillOpacity": 80, "lineWidth": 1, "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "gradientMode": "none", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "scaleDistribution": {"type": "linear"}, "thresholdsStyle": {"mode": "off"}},
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": 0}]}
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 2},
+      "id": 2,
+      "options": {
+        "barRadius": 0,
+        "barWidth": 0.97,
+        "colorByField": "org_login",
+        "fullHighlight": false,
+        "groupWidth": 0.7,
+        "legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true},
+        "orientation": "auto",
+        "showValue": "auto",
+        "stacking": "normal",
+        "tooltip": {"hideZeros": false, "mode": "single", "sort": "none"},
+        "xTickLabelRotation": -15,
+        "xTickLabelSpacing": 0
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "github_events",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT org_login, org_repos_total_score FROM hidden_gem_org_scores(${alpha}::float, ${beta}::float, ${hours}::int, ARRAY[${language:sqlstring}]::text[], ARRAY[${license:sqlstring}]::text[], ARRAY[${topic:sqlstring}]::text[]) WHERE org_repos_total_score > 0 ORDER BY org_repos_total_score DESC NULLS LAST LIMIT 10;",
+          "refId": "A",
+          "sql": {"columns": [{"parameters": [], "type": "function"}], "groupBy": [{"property": {"type": "string"}, "type": "groupBy"}], "limit": 50}
+        }
+      ],
+      "title": "Top Orgs by Org-Owned-Repo Score",
+      "type": "barchart"
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"fillOpacity": 80, "lineWidth": 1, "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "gradientMode": "none", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "scaleDistribution": {"type": "linear"}, "thresholdsStyle": {"mode": "off"}},
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": 0}]}
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 2},
+      "id": 3,
+      "options": {
+        "barRadius": 0,
+        "barWidth": 0.97,
+        "colorByField": "org_login",
+        "fullHighlight": false,
+        "groupWidth": 0.7,
+        "legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true},
+        "orientation": "auto",
+        "showValue": "auto",
+        "stacking": "normal",
+        "tooltip": {"hideZeros": false, "mode": "single", "sort": "none"},
+        "xTickLabelRotation": -15,
+        "xTickLabelSpacing": 0
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "github_events",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT org_login, member_repos_total_score FROM hidden_gem_org_scores(${alpha}::float, ${beta}::float, ${hours}::int, ARRAY[${language:sqlstring}]::text[], ARRAY[${license:sqlstring}]::text[], ARRAY[${topic:sqlstring}]::text[]) WHERE member_repos_total_score > 0 ORDER BY member_repos_total_score DESC NULLS LAST LIMIT 10;",
+          "refId": "A",
+          "sql": {"columns": [{"parameters": [], "type": "function"}], "groupBy": [{"property": {"type": "string"}, "type": "groupBy"}], "limit": 50}
+        }
+      ],
+      "title": "Top Orgs by Member-Repo Score",
+      "type": "barchart"
+    },
+    {
+      "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "custom": {"align": "auto", "cellOptions": {"type": "auto"}, "footer": {"reducers": []}, "inspect": false},
+          "decimals": 4,
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": 0}]}
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 10},
+      "id": 1,
+      "options": {"cellHeight": "sm", "showHeader": true, "sortBy": [{"desc": true, "displayName": "org_repos_total_score"}]},
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "github_events",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT org_login, org_repos_total_score, org_repos_best_score, org_active_repos, org_hidden_gem_count, member_repos_total_score, member_repos_best_score, member_active_repos, member_active_users, member_hidden_gem_count FROM hidden_gem_org_scores(${alpha}::float, ${beta}::float, ${hours}::int, ARRAY[${language:sqlstring}]::text[], ARRAY[${license:sqlstring}]::text[], ARRAY[${topic:sqlstring}]::text[]) ORDER BY (org_repos_total_score + member_repos_total_score) DESC NULLS LAST;",
+          "refId": "A",
+          "sql": {"columns": [{"parameters": [], "type": "function"}], "groupBy": [{"property": {"type": "string"}, "type": "groupBy"}], "limit": 50}
+        }
+      ],
+      "title": "Org Hidden-Gem Ranking",
+      "type": "table"
+    }
+  ],
+  "preload": false,
+  "schemaVersion": 42,
+  "tags": ["hidden-gem", "drill-down"],
+  "templating": {
+    "list": [
+      {"current": {"text": "1.0", "value": "1.0"}, "description": "weight stars", "name": "alpha", "options": [], "query": "0.5, 0.75, 1.0, 1.25, 1.5, 2.0", "type": "custom", "valuesFormat": "csv"},
+      {"current": {"text": "1.0", "value": "1.0"}, "description": "weight forks", "name": "beta",  "options": [], "query": "0.5, 0.75, 1.0, 1.25, 1.5, 2.0", "type": "custom", "valuesFormat": "csv"},
+      {"current": {"text": "96",  "value": "96"},  "description": "Timeframe (last X hours)", "label": "Timeframe", "name": "hours", "options": [], "query": "1, 2, 6, 12, 24, 48, 72, 96", "type": "custom", "valuesFormat": "csv"},
+      {"name": "language", "label": "Language", "type": "query", "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"}, "query": "SELECT value FROM v_repo_languages ORDER BY 1", "definition": "SELECT value FROM v_repo_languages ORDER BY 1", "multi": true, "includeAll": true, "allValue": null, "refresh": 1, "sort": 1, "current": {"text": ["All"], "value": ["$__all"]}, "options": []},
+      {"name": "license",  "label": "License",  "type": "query", "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"}, "query": "SELECT value FROM v_repo_licenses ORDER BY 1",  "definition": "SELECT value FROM v_repo_licenses ORDER BY 1",  "multi": true, "includeAll": true, "allValue": null, "refresh": 1, "sort": 1, "current": {"text": ["All"], "value": ["$__all"]}, "options": []},
+      {"name": "topic",    "label": "Topic",    "type": "query", "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"}, "query": "SELECT value FROM v_repo_topics ORDER BY 1",    "definition": "SELECT value FROM v_repo_topics ORDER BY 1",    "multi": true, "includeAll": true, "allValue": null, "refresh": 1, "sort": 1, "current": {"text": ["All"], "value": ["$__all"]}, "options": []}
+    ]
+  },
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Hidden Gem - Orgs (Drill-Down)",
+  "uid": "hidden-gem-orgs",
+  "version": 1,
+  "weekStart": ""
+}

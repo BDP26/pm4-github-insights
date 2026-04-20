@@ -19,7 +19,11 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "links": [],
+  "links": [
+    {"title": "Drill-Down: Repos", "type": "link", "url": "/d/hidden-gem-repos", "keepTime": true, "includeVars": true, "targetBlank": false, "asDropdown": false, "tags": [], "tooltip": "", "icon": "external link"},
+    {"title": "Drill-Down: Users", "type": "link", "url": "/d/hidden-gem-users", "keepTime": true, "includeVars": true, "targetBlank": false, "asDropdown": false, "tags": [], "tooltip": "", "icon": "external link"},
+    {"title": "Drill-Down: Orgs",  "type": "link", "url": "/d/hidden-gem-orgs",  "keepTime": true, "includeVars": true, "targetBlank": false, "asDropdown": false, "tags": [], "tooltip": "", "icon": "external link"}
+  ],
   "panels": [
     {
       "datasource": {
