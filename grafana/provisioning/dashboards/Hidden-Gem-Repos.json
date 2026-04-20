@@ -66,7 +66,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT full_name AS repository_path, sig_score AS significance_score FROM hidden_gem_repo_scores(${alpha}::float, ${beta}::float, ${hours}::int, ARRAY(SELECT jsonb_array_elements_text('${language:json}'::jsonb))::text[], ARRAY(SELECT jsonb_array_elements_text('${license:json}'::jsonb))::text[], ARRAY(SELECT jsonb_array_elements_text('${topic:json}'::jsonb))::text[]) WHERE sig_score IS NOT NULL ORDER BY sig_score DESC NULLS LAST LIMIT 10;",
+          "rawSql": "SELECT full_name AS repository_path, sig_score AS significance_score FROM hidden_gem_repo_scores(${alpha}::float, ${beta}::float, ${hours}::int, ARRAY(SELECT jsonb_array_elements_text($gj$${language:json}$gj$::jsonb))::text[], ARRAY(SELECT jsonb_array_elements_text($gj$${license:json}$gj$::jsonb))::text[], ARRAY(SELECT jsonb_array_elements_text($gj$${topic:json}$gj$::jsonb))::text[]) WHERE sig_score IS NOT NULL ORDER BY sig_score DESC NULLS LAST LIMIT 10;",
           "refId": "A",
           "sql": {"columns": [{"parameters": [], "type": "function"}], "groupBy": [{"property": {"type": "string"}, "type": "groupBy"}], "limit": 50}
         }
@@ -98,7 +98,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT repo_id::text, name AS repository_name, full_name AS repository_path, language, license_spdx, count_stars_interval, count_forks_interval, poisson_cdf, sig_score AS significance_score, last_event_in_window FROM hidden_gem_repo_scores(${alpha}::float, ${beta}::float, ${hours}::int, ARRAY(SELECT jsonb_array_elements_text('${language:json}'::jsonb))::text[], ARRAY(SELECT jsonb_array_elements_text('${license:json}'::jsonb))::text[], ARRAY(SELECT jsonb_array_elements_text('${topic:json}'::jsonb))::text[]) WHERE sig_score IS NOT NULL ORDER BY sig_score DESC NULLS LAST;",
+          "rawSql": "SELECT repo_id::text, name AS repository_name, full_name AS repository_path, language, license_spdx, count_stars_interval, count_forks_interval, poisson_cdf, sig_score AS significance_score, last_event_in_window FROM hidden_gem_repo_scores(${alpha}::float, ${beta}::float, ${hours}::int, ARRAY(SELECT jsonb_array_elements_text($gj$${language:json}$gj$::jsonb))::text[], ARRAY(SELECT jsonb_array_elements_text($gj$${license:json}$gj$::jsonb))::text[], ARRAY(SELECT jsonb_array_elements_text($gj$${topic:json}$gj$::jsonb))::text[]) WHERE sig_score IS NOT NULL ORDER BY sig_score DESC NULLS LAST;",
           "refId": "A",
           "sql": {"columns": [{"parameters": [], "type": "function"}], "groupBy": [{"property": {"type": "string"}, "type": "groupBy"}], "limit": 50}
         }
