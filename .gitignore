@@ -212,5 +212,4 @@ __marimo__/
 .env copy.example
 docs/superpowers
 GITHUB PM4.session.sql
-report/
 .DS_Store
