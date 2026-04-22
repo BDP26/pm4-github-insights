@@ -1,0 +1,695 @@
+%%
+%% GitHub Innovation Portal — Final Project Report
+%% PM4 Big Data Projects, ZHAW School of Engineering, FS25
+%%
+%% Built on the ACM sigconf template (acmart document class).
+%% Compile with: pdflatex → bibtex → pdflatex → pdflatex
+%%
+\documentclass[sigconf]{acmart}
+
+%% ── Extra packages not bundled with acmart ─────────────────────────────────
+\usepackage{tabularx}          % Flexible-width table columns
+\usepackage{float}             % [H] placement specifier
+\usepackage{mdframed}          % Framed TODO boxes (safer than tcolorbox with acmart)
+\usepackage{listings}          % Code snippets (optional)
+
+%% ── TODO helper ────────────────────────────────────────────────────────────
+\mdfdefinestyle{todoStyle}{
+  linecolor=orange!70!black,
+  backgroundcolor=yellow!8,
+  linewidth=0.7pt,
+  innertopmargin=4pt, innerbottommargin=4pt,
+  innerleftmargin=6pt, innerrightmargin=6pt,
+  skipabove=4pt, skipbelow=4pt
+}
+\newenvironment{todobox}%
+  {\begin{mdframed}[style=todoStyle]\small\textbf{TODO:}~}%
+  {\end{mdframed}}
+\newcommand{\TODO}[1]{\textcolor{orange!80!black}{\textbf{[TODO: #1]}}}
+
+%% ── Rights / conference metadata ───────────────────────────────────────────
+%% Replace with the actual rights block if submitted to an ACM venue.
+%% For the ZHAW internal hand-in, the fields below are placeholders.
+\setcopyright{none}
+\copyrightyear{2025}
+\acmYear{2025}
+\acmDOI{}
+\acmConference[PM4 FS25]{Big Data Projects}{Spring 2025}{ZHAW, Winterthur, Switzerland}
+\acmISBN{}
+
+%% ============================================================
+\begin{document}
+%% ============================================================
+
+%% ── Title ───────────────────────────────────────────────────────────────────
+\title{GitHub Innovation Portal}
+\subtitle{A Real-Time Open-Source Trend Analytics Platform}
+
+%% ── Authors ─────────────────────────────────────────────────────────────────
+\author{Jann Erhardt}
+\email{erharjan@students.zhaw.ch}
+\affiliation{%
+  \institution{Zurich University of Applied Sciences}
+  \city{Winterthur}
+  \state{Zurich}
+  \country{Switzerland}
+}
+
+\author{Gian Gamper}
+\email{gampegia@students.zhaw.ch}
+\affiliation{%
+  \institution{Zurich University of Applied Sciences}
+  \city{Winterthur}
+  \state{Zurich}
+  \country{Switzerland}
+}
+
+\author{Jonas Bratschi}
+\email{bratsjon@students.zhaw.ch}
+\affiliation{%
+  \institution{Zurich University of Applied Sciences}
+  \city{Winterthur}
+  \state{Zurich}
+  \country{Switzerland}
+}
+
+\renewcommand{\shortauthors}{Erhardt, Gamper, Bratschi}
+
+%% ── Abstract ────────────────────────────────────────────────────────────────
+\begin{abstract}
+Open-source activity on GitHub generates tens of millions of events per day,
+making it difficult for developers, researchers, and technology scouts to
+identify promising early-stage projects before they gain mainstream attention.
+This paper presents the \textit{GitHub Innovation Portal}, an end-to-end
+streaming analytics platform that ingests the public GitHub event stream in
+near-real time, enriches each event with geographic and user-profile metadata,
+stores it in a time-series optimised database, and exposes actionable insights
+through two complementary visualisation layers.
+
+The system is built on Apache Kafka (KRaft) for durable event buffering,
+TimescaleDB for compressed hypertable storage with pre-computed continuous
+aggregates, FastAPI for a low-latency REST and Server-Sent Events interface,
+and a Next.js 16 dashboard for live trend visualisation. The entire stack is
+containerised and deployable with a single \texttt{docker compose} command.
+\TODO{Refine after report completion}
+\end{abstract}
+
+%% ── CCS Concepts ────────────────────────────────────────────────────────────
+%% Generate the correct terms at https://dl.acm.org/ccs/ccs.cfm
+\begin{CCSXML}
+<ccs2012>
+  <concept>
+    <concept_id>10002951.10002952.10002953.10010820.10003208</concept_id>
+    <concept_desc>Information systems~Data streams</concept_desc>
+    <concept_significance>500</concept_significance>
+  </concept>
+  <concept>
+    <concept_id>10002951.10002952.10002953.10010820</concept_id>
+    <concept_desc>Information systems~Database management system engines</concept_desc>
+    <concept_significance>300</concept_significance>
+  </concept>
+  <concept>
+    <concept_id>10011007.10011006.10011008.10011009.10011012</concept_id>
+    <concept_desc>Software and its engineering~Software architectures</concept_desc>
+    <concept_significance>100</concept_significance>
+  </concept>
+</ccs2012>
+\end{CCSXML}
+\ccsdesc[500]{Information systems~Data streams}
+\ccsdesc[300]{Information systems~Database management system engines}
+\ccsdesc[100]{Software and its engineering~Software architectures}
+
+%% ── Keywords ────────────────────────────────────────────────────────────────
+\keywords{stream processing, GitHub event API, Apache Kafka, TimescaleDB,
+  real-time analytics, open-source trend detection, geo-enrichment,
+  Server-Sent Events, Next.js dashboard}
+
+%% ── Teaser figure ───────────────────────────────────────────────────────────
+%% Uncomment and replace the filename once a system architecture diagram or
+%% dashboard screenshot is available.
+%%
+%% \begin{teaserfigure}
+%%   \includegraphics[width=\textwidth]{dashboard-overview}
+%%   \caption{The GitHub Innovation Portal dashboard showing live KPI cards,
+%%     commit trend, top repositories, and the real-time event feed.}
+%%   \Description{Screenshot of the Next.js dashboard with four KPI metric
+%%     cards at the top, an area chart of commits over time, a bar chart of
+%%     the most active repositories, and a live event table at the bottom.}
+%%   \label{fig:teaser}
+%% \end{teaserfigure}
+
+\received{January 2025}
+\received[revised]{\TODO{Fill in revision date}}
+\received[accepted]{March 2025}
+
+%% ============================================================
+\maketitle
+%% ============================================================
+
+%% ── 1. Introduction ─────────────────────────────────────────────────────────
+\section{Introduction}
+
+The open-source ecosystem hosted on GitHub grows continuously, with millions
+of push events, pull requests, issue comments, and repository forks published
+every day~\cite{github-rest-api}. For developers, researchers, and technology
+scouts this volume presents a paradox: the very richness of the signal makes
+it practically impossible to manually track emerging projects before they
+appear in mainstream media.
+
+Existing discovery mechanisms rely on lagging indicators --- stars accumulated
+over weeks, blog posts, or curated lists --- rather than on the raw momentum
+visible in the live event stream. A repository that doubles its commit
+frequency or attracts contributors from three continents in a single day
+represents a signal of genuine innovation; today that signal is largely wasted.
+
+This project addresses the gap with the \textit{GitHub Innovation Portal}:
+an end-to-end streaming analytics platform that continuously ingests the
+GitHub public events API, enriches each event with geographic and user-profile
+context, persists the data in a time-series optimised store, and surfaces
+trends through an interactive dashboard and operational Grafana dashboards.
+
+The remainder of this paper is structured as follows.
+Section~\ref{sec:related} surveys related approaches.
+Section~\ref{sec:architecture} describes the system architecture.
+Section~\ref{sec:implementation} details the implementation of each component.
+Section~\ref{sec:evaluation} presents evaluation results.
+Section~\ref{sec:decisions} justifies the technology choices.
+Section~\ref{sec:challenges} discusses challenges encountered.
+Section~\ref{sec:conclusion} concludes with lessons learned and future work.
+
+%% ── 2. Related Work ─────────────────────────────────────────────────────────
+\section{Related Work}
+\label{sec:related}
+
+\begin{todobox}
+Insert 3--5 brief paragraphs covering related systems and prior art.
+Suggested topics:
+
+\begin{itemize}
+  \item GitHub Archive / GH Archive project (historical event download)
+  \item GHTorrent / Software Heritage (large-scale repository mining)
+  \item Academic papers on streaming architectures (e.g., Lambda/Kappa
+        architecture, Kafka Streams)
+  \item Open-source trend detection tools (e.g., Trending page on GitHub,
+        third-party trackers)
+  \item Time-series databases: comparison papers (InfluxDB vs.\ TimescaleDB)
+\end{itemize}
+
+Add corresponding \texttt{.bib} entries to \texttt{references.bib}.
+\end{todobox}
+
+\TODO{Write Related Work section (approx.\ 300--400 words).}
+
+%% ── 3. System Architecture ──────────────────────────────────────────────────
+\section{System Architecture}
+\label{sec:architecture}
+
+\begin{figure}[h]
+  \centering
+  % Replace with an actual architecture diagram exported as PDF or PNG.
+  % \includegraphics[width=\linewidth]{architecture}
+  \fbox{\parbox{0.9\linewidth}{\centering\vspace{1.2cm}
+    \TODO{Insert architecture diagram here.}\\
+    Export the ASCII diagram below as a vector figure (e.g., draw.io PDF).
+    \vspace{1.2cm}}}
+  \caption{End-to-end architecture of the GitHub Innovation Portal. Events
+    flow from the GitHub API through Kafka into TimescaleDB, where they are
+    served by FastAPI to the Next.js dashboard and Grafana.}
+  \Description{Block diagram showing six services connected in a pipeline:
+    Producer polls the GitHub API and publishes to Kafka; Consumer reads from
+    Kafka, enriches events, and writes to TimescaleDB; FastAPI exposes REST
+    and SSE endpoints consumed by the Next.js frontend; Grafana reads
+    TimescaleDB directly.}
+  \label{fig:architecture}
+\end{figure}
+
+The architecture of the project consists of a real-time data streaming pipeline designed to ingest, enrich, and visualize GitHub events. It is built to efficiently manage GitHub API rate limits and ensure high scalability by decoupling individual components using a message broker.
+
+\subsection{Data Ingestion (Producer)}
+The \textbf{Producer} (\texttt{producer/producer.py}) serves as the entry point of the pipeline:
+\begin{itemize}
+    \item \textbf{Polling:} It polls the public GitHub Events API every 10 seconds.
+    \item \textbf{Deduplication:} To prevent redundant data, the producer filters events based on their unique GitHub Event ID.
+    \item \textbf{Kafka Integration:} Cleaned raw JSON data is published to the Kafka topic \texttt{github.events.raw}.
+    \item \textbf{Rate Limit Management:} A standard GitHub personal access token has a rate limit of 5\,000 requests per hour, which is sufficient for continuous polling without hitting the unauthenticated cap of 60 requests per hour.
+\end{itemize}
+
+\subsection{Message Broker (Kafka)}
+\textbf{Kafka} acts as the central message bus, operating in KRaft mode without the need for Zookeeper:
+\begin{itemize}
+    \item \textbf{Decoupling:} It separates the high-frequency data ingestion (Producer) from the more complex data enrichment steps (Consumer).
+    \item \textbf{Durability:} Kafka serves as a reliable buffer; if a consumer fails, data is retained for 48 hours, allowing the system to resume where it left off.
+    \item \textbf{Scalability:} The main topics are divided into three partitions, enabling parallel processing by multiple consumer instances.
+\end{itemize}
+
+\subsection{Processing and Enrichment (Consumer \& Geocoder)}
+In this stage, raw events are transformed into high-value data through a highly optimized enrichment process. The system is designed to maximize throughput while respecting strict external API constraints.
+
+\begin{itemize}
+    \item \textbf{Parallel Consumer Instances:} The system is designed for horizontal scalability. Multiple consumer instances (e.g., three instances in multi-consumer mode) can run in parallel. Using Kafka's partition assignment, each instance is "pinned" to specific partitions, ensuring that event processing is distributed evenly and without overlap.
+    \item \textbf{Token Pool Management:} To overcome GitHub's rate limits, the system implements a \textbf{TokenPool} mechanism. It manages multiple API keys for both user and repository metadata. The pool uses a round-robin strategy and automatically skips tokens that have been flagged as rate-limited, resuming their use only after their specific reset time has passed.
+    \item \textbf{GraphQL Batch Processing:} The primary enrichment method uses the \textbf{GitHub GraphQL API}. Instead of requesting data for every event individually, the \texttt{Enricher} accumulates up to 20 items (users or repositories) and fetches them in a single batched request. This significantly reduces the number of required HTTP calls and maximizes the utility of each API token.
+    \item \textbf{REST Fallback Mechanism:} While GraphQL is the preferred method for efficiency, the system includes a robust \textbf{REST API fallback}. If a GraphQL batch query returns null for specific entities or encounters a partial failure, the system automatically falls back to individual REST calls to ensure that no data point is missed.
+    \item \textbf{Geocoding (Geocoder \& Photon):} Geographic data is processed by a dedicated \texttt{geocoder} service. It extracts location strings from enriched user profiles and queries the local \textbf{Photon} instance. This allows the system to resolve coordinates and country codes in the background without blocking the main event-processing pipeline.
+\end{itemize}
+
+\subsection{Data Storage (TimescaleDB)}
+The project uses \textbf{TimescaleDB} (a PostgreSQL extension) as its primary storage solution:
+\begin{itemize}
+    \item \textbf{Hypertables:} Event data is automatically partitioned into time-based chunks, which significantly improves query performance for large datasets.
+    \item \textbf{Continuous Aggregates:} The database automatically pre-calculates rollups (e.g., 5-minute or 1-hour statistics) in the background, allowing complex dashboard queries to load in milliseconds.
+    \TODO{Add db scheme graph}
+  \end{itemize}
+
+\subsection{Visualization}
+The primary platform for data analysis and system oversight is Grafana. It serves as the central visualization hub, providing a comprehensive suite of dashboards that directly query the TimescaleDB continuous aggregates and status logs. The dashboards are categorized into two main areas:
+
+\begin{itemize}
+    \item \textbf{GitHub Data Insights (Hidden Gem Series):} These dashboards provide deep-dive analytics into the enriched GitHub data:
+    \begin{itemize}
+        \item \textit{Hidden Gem - Overview}: A high-level summary of all captured events and geographic distributions.
+        \item \textit{Hidden Gem - Organizations}: Metrics focused on organizational activity and trends.
+        \item \textit{Hidden Gem - Repositories}: Analysis of repository growth, popularity, and activity.
+        \item \textit{Hidden Gem - Users}: Insights into user contributions and profiles.
+    \end{itemize}
+    
+    \item \textbf{System Monitoring and Status:} Dedicated dashboards track the operational health and performance of the pipeline:
+    \begin{itemize}
+        \item \textit{System Status Overview}: Monitoring of database performance and overall system health.
+        \item \textit{Geocoder Request Logs}: Real-time tracking of the geocoding service's efficiency and request volume.
+        \item \textit{General Request Logs}: Logs and metrics related to internal data flow and API interactions.
+    \end{itemize}
+\end{itemize}
+
+\subsection{Geocoding Engine (Photon)}
+To implement high-performance geographic enrichment of GitHub events without relying on external rate-limited services, \textbf{Photon} was integrated into the infrastructure.
+
+\begin{itemize}
+    \item \textbf{Local Instance:} Photon is an open-source geocoding service based on OpenStreetMap data. By operating it as a local Docker container, latency is minimized and the strict usage constraints of public APIs (such as Nominatim) are bypassed.
+    \item \textbf{Data Basis and Regions:} The service is initialized with specific datasets—for instance, covering regions like Africa—which are persisted in the \texttt{photon\_data} volume to ensure stability and speed.
+    \item \textbf{API Interface:} Photon provides a REST API that is queried by the \texttt{geocoder} service. It processes unstructured location strings from GitHub profiles and returns structured JSON data, including latitude, longitude, and ISO country codes.
+    \item \textbf{Fault Tolerance:} The local instance's high performance allows for complex fuzzy search queries. This ensures that even if a location cannot be resolved immediately, the overall data flow of the pipeline is not delayed.
+\end{itemize}
+
+\begin{table}[h!]
+\centering
+\caption{Expanded System Component Overview (Docker Services)}
+\begin{tabular}{|l|p{10cm}|}
+\hline
+\textbf{Service} & \textbf{Function} \\ \hline
+\texttt{producer} & Polls the GitHub API and writes raw event data to Kafka. \\ \hline
+\texttt{kafka} & Central message broker used for service decoupling and buffering. \\ \hline
+\texttt{consumer} & Enriches events with user and repository metadata via the GitHub API. \\ \hline
+\texttt{geocoder} & Logic layer that coordinates location queries between the database and the engine. \\ \hline
+\texttt{photon} & \textbf{Geocoding engine that resolves location strings into geographic coordinates locally.} \\ \hline
+\texttt{db-writer} & Consumes status and rate limit topics to persist operational metrics. \\ \hline
+\texttt{timescaledb} & Time-series optimized SQL database used for data storage and aggregation. \\ \hline
+\texttt{grafana} & Central visualization platform for data insights and system monitoring. \\ \hline
+\end{tabular}
+\end{table}
+
+
+%% ── 4. Implementation ───────────────────────────────────────────────────────
+\section{Implementation}
+\label{sec:implementation}
+
+\subsection{Data Ingestion}
+
+The producer (\texttt{producer/producer.py}) fetches up to three pages of
+the \texttt{GET /events} endpoint per poll cycle, yielding approximately
+90 events every 10 seconds. An in-process set of recently seen event IDs
+prevents duplicate Kafka messages when polling overlaps the GitHub API cache
+window. Providing a GitHub personal access token raises the unauthenticated
+rate limit from 60 to 5\,000 requests per hour~\cite{github-rest-api}.
+
+\subsection{Event Enrichment}
+
+The consumer (\texttt{consumer/consumer.py}) performs two enrichment passes:
+
+\begin{enumerate}
+  \item \textbf{User-profile enrichment.} The GitHub REST API supplies each
+    actor's company name, self-reported location, public repository count,
+    and follower count. Results are cached in a dictionary for the process
+    lifetime to avoid redundant API calls.
+  \item \textbf{Geocoding.} Free-text location strings are resolved to
+    WGS-84 coordinates via Nominatim~\cite{nominatim}. A rate limiter
+    enforces the required 1\,req/s ceiling; a one-hour LRU cache avoids
+    re-geocoding identical strings.
+\end{enumerate}
+
+Enriched records are written to five normalised tables:
+\texttt{users}, \texttt{repos}, \texttt{organizations},
+\texttt{organization\_members}, and \texttt{events}.
+
+\subsection{Storage Layer}
+
+The \texttt{events} table is a TimescaleDB hypertable partitioned into
+one-day chunks. Chunk-level columnar compression is applied after seven days
+(order by \texttt{time DESC}, segment by \texttt{event\_type}), achieving
+compression ratios of 10--20$\times$ over the raw row-store~\cite{timescaledb}.
+A 90-day data retention policy bounds disk usage.
+
+Three continuous aggregates pre-compute rollups at ingest time rather
+than query time (Table~\ref{tab:aggregates}), keeping dashboard query
+latency below a few milliseconds even at scale.
+
+\begin{table}[h]
+  \caption{TimescaleDB continuous aggregates}
+  \label{tab:aggregates}
+  \begin{tabularx}{\linewidth}{l l X}
+    \toprule
+    \textbf{View} & \textbf{Bucket} & \textbf{Content} \\
+    \midrule
+    \texttt{event\_stats\_5m}  & 5 min & Event counts by \texttt{event\_type} \\
+    \texttt{country\_ids\_5m}  & 5 min & Event counts by ISO country code \\
+    \texttt{actor\_stats\_1h}  & 1 h   & Per-actor event totals \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{API Layer}
+
+The FastAPI service exposes the endpoints listed in
+Table~\ref{tab:endpoints}. The \texttt{/stream/events} endpoint implements
+the Server-Sent Events protocol~\cite{sse-spec}: it polls the
+\texttt{v\_recent\_events} database view every 3 seconds and writes
+JSON-encoded event objects to the response stream. Keep-alive comments
+(\texttt{: ping}) are sent between data frames to prevent browser and
+proxy timeouts.
+
+\begin{table}[h]
+  \caption{FastAPI endpoint reference}
+  \label{tab:endpoints}
+  \begin{tabularx}{\linewidth}{l X}
+    \toprule
+    \textbf{Endpoint} & \textbf{Description} \\
+    \midrule
+    \texttt{GET /health}                   & Liveness check \\
+    \texttt{GET /api/kpis}                 & KPI metrics with 30-day deltas \\
+    \texttt{GET /api/commits-over-time}    & Daily commit buckets (configurable window) \\
+    \texttt{GET /api/top-repos}            & Most active repositories \\
+    \texttt{GET /api/recent-events}        & Latest ingested events \\
+    \texttt{GET /stream/events}            & SSE live stream (3\,s poll) \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Visualisation}
+
+The Next.js~\cite{nextjs} dashboard (port 3000) uses React 19 server
+components to fetch KPI and chart data at request time via the
+\texttt{API\_URL} environment variable (internal Docker DNS). Client
+components subscribe to the SSE stream using a typed \texttt{useSSE}
+React hook that reconnects automatically after a 3-second back-off.
+The UI is built with Tremor v3 (Recharts under the hood) and
+Tailwind CSS 4.
+
+%% ── 5. Evaluation ───────────────────────────────────────────────────────────
+\section{Evaluation}
+\label{sec:evaluation}
+
+\begin{todobox}
+Fill in this section after a representative system run (24--48 hours
+recommended). Suggested structure below.
+\end{todobox}
+
+\subsection{Experimental Setup}
+
+\subsubsection{Hardware and Operating System}
+The entire pipeline was hosted on a dedicated virtualized server. The system leverages high-performance AMD EPYC processors and sufficient memory to handle the concurrent execution of multiple Docker containers, including the Kafka broker and the TimescaleDB instance. The detailed system specifications are summarized in Table \ref{tab:system_specs}.
+
+\begin{table}[h!]
+\centering
+\caption{System Specifications}
+\label{tab:system_specs}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Component} & \textbf{Specification} \\ \hline
+Hostname           & github-insights \\ \hline
+Operating System   & Ubuntu 24.04.4 LTS (Noble) \\ \hline
+Kernel             & Linux 6.17.0-20-generic (x86\_64) \\ \hline
+CPU                & AMD EPYC-Milan (16 vCPUs, 16 Cores) \\ \hline
+Hypervisor         & KVM (Full Virtualization) \\ \hline
+Memory             & 31 GiB Total \\ \hline
+Storage            & 348 GB (NVMe-based Virtual Disk) \\ \hline
+\end{tabular}
+\end{table}
+
+\subsubsection{Software Environment and Containerization}
+The architecture is fully containerized using \textbf{Docker} and managed via \textbf{Docker Compose}. This approach ensures service isolation and simplified dependency management. The primary software components and their respective versions are:
+
+\begin{itemize}
+    \item \textbf{Message Broker:} Apache Kafka v3.9.0, running in KRaft mode for metadata management without Zookeeper.
+    \item \textbf{Database:} TimescaleDB (based on PostgreSQL 16), utilizing hypertables and continuous aggregates for time-series optimization.
+    \item \textbf{Geocoding Engine:} Photon (OpenStreetMap-based) running as a local REST service.
+    \item \textbf{Runtime Environment:} Python 3.11+ for the Producer, Consumer, and Geocoder microservices.
+\end{itemize}
+
+\subsubsection{Pipeline Configuration}
+For the experimental runs, the system was configured in \textbf{multi-consumer mode} to test horizontal scalability. 
+\begin{itemize}
+    \item \textbf{Parallelism:} Three independent consumer instances were deployed, each pinned to a specific Kafka partition to prevent processing overlaps.
+    \item \textbf{Resource Allocation:} Given the 16 vCPUs available, the load was distributed across the Kafka broker, the TimescaleDB background workers, and the enrichment consumers to maintain a load average below 1.0 during peak ingestion.
+    \item \textbf{Network:} A bridge-driver Docker network with a custom MTU of 1442 was used to optimize internal container communication.
+\end{itemize}
+
+\subsection{Throughput and Latency}
+
+Table~\ref{tab:throughput} summarises the key performance metrics measured
+during the evaluation period.
+
+\begin{table}[h]
+  \caption{Pipeline throughput and latency metrics}
+  \label{tab:throughput}
+  \begin{tabularx}{\linewidth}{l l X}
+    \toprule
+    \textbf{Metric} & \textbf{Value} & \textbf{Notes} \\
+    \midrule
+    Events ingested (total)       & \TODO{N}        & Over a \TODO{T}-hour run \\
+    Average ingestion rate        & \TODO{X} ev/min & \\
+    Peak ingestion rate           & \TODO{X} ev/min & \\
+    Median end-to-end latency     & \TODO{X} s      & Poll → dashboard update \\
+    Kafka consumer lag (steady)   & \TODO{X} msgs   & Measured via Kafka-UI \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Data Coverage and Enrichment Quality}
+
+Table~\ref{tab:coverage} shows the breadth of the data collected.
+
+\begin{table}[h]
+  \caption{Data coverage over evaluation period}
+  \label{tab:coverage}
+  \begin{tabularx}{\linewidth}{l l}
+    \toprule
+    \textbf{Dimension} & \textbf{Value} \\
+    \midrule
+    Unique repositories            & \TODO{N} \\
+    Unique contributors            & \TODO{N} \\
+    Countries represented          & \TODO{N} \\
+    Geocoding success rate         & \TODO{X}\% \\
+    Event types observed           & \TODO{list, e.g.\ PushEvent, PullRequestEvent, \ldots} \\
+    Most active programming lang.  & \TODO{language} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Storage Efficiency}
+
+\TODO{Report uncompressed vs.\ compressed chunk size for the
+\texttt{events} hypertable. Query:
+\texttt{SELECT * FROM chunk\_compression\_stats('events');}}
+
+%% ── 6. Technology Decision Rationale ────────────────────────────────────────
+\section{Technology Decision Rationale}
+\label{sec:decisions}
+
+\paragraph{Apache Kafka.}
+Kafka~\cite{kafka} decouples the rate-limited GitHub poller from the
+slower geo-enrichment step. Its consumer group model allows the enrichment
+workload to be parallelised by running additional consumer containers without
+modifying the producer. The durable log acts as a replay buffer: if the
+consumer crashes mid-processing, it resumes from its last committed offset
+without data loss.
+
+\paragraph{TimescaleDB over plain PostgreSQL.}
+Plain PostgreSQL lacks automatic time-based chunk pruning and columnar
+compression; queries over large event tables become progressively slower
+as data accumulates. TimescaleDB~\cite{timescaledb} adds hypertables
+(transparent partitioning by time), 10--20$\times$ compression, and
+continuous aggregates that materialise rollups at ingest time. It retains
+full SQL compatibility, which is essential for the JOIN-heavy enrichment
+queries and JSONB payload fallback.
+
+\paragraph{FastAPI over Flask/Django.}
+FastAPI's~\cite{fastapi} async-first design and native \texttt{StreamingResponse}
+make SSE implementation straightforward. The automatic OpenAPI documentation
+at \texttt{/docs} was valuable during development and testing.
+
+\paragraph{Next.js 16 (App Router).}
+Server components eliminate the waterfall of client-side data fetches on
+initial page load. The App Router's layout system provides a persistent
+sidebar without duplicating markup across pages. Tremor's pre-built chart
+components (AreaChart, BarChart, Table) accelerated dashboard development
+significantly.
+
+%% ── 7. Challenges ───────────────────────────────────────────────────────────
+\section{Challenges and Solutions}
+\label{sec:challenges}
+
+\paragraph{GitHub API rate limiting.}
+Without authentication, the REST API caps unauthenticated requests at
+60 per hour --- insufficient for continuous polling. We mitigated this with
+an optional personal access token (raising the cap to 5\,000/h) and
+client-side deduplication that avoids re-publishing events already seen within
+the polling window.
+
+\paragraph{Geocoding throughput.}
+Nominatim enforces a strict 1\,req/s policy for fair use. We introduced an
+in-process LRU cache keyed on the normalised location string, which
+eliminated redundant lookups for common values such as ``San Francisco, CA''
+or ``Berlin, Germany''.
+
+\paragraph{Service startup ordering.}
+TimescaleDB and Kafka require 10--30 seconds after container start before
+accepting connections. Docker Compose health checks gate dependent services.
+Additionally, the FastAPI service implements an internal retry loop that
+polls the database connection every two seconds and logs progress until the
+pool is established.
+
+\paragraph{React 19 / Tremor peer dependency conflict.}
+Tremor v3 declares a React 18 peer dependency while the project uses React 19.
+Installing with \texttt{--legacy-peer-deps} bypasses the version check;
+no runtime incompatibilities were observed during development.
+
+\paragraph{\TODO{Additional challenges.}}
+\TODO{Add any further challenges encountered during the project,
+e.g., Kafka KRaft configuration, TimescaleDB compression policy tuning,
+SSE browser compatibility, etc.}
+
+%% ── 8. Conclusion ───────────────────────────────────────────────────────────
+\section{Conclusion and Future Work}
+\label{sec:conclusion}
+
+\TODO{Write 1--2 paragraphs. Summarise what was achieved relative to the
+three project objectives: (O1) defining momentum metrics, (O2) building a
+live dashboard, and (O3) granular filtering. Mention the most interesting
+finding from the data.}
+
+The GitHub Innovation Portal demonstrates that a small team can build a
+production-grade, end-to-end streaming analytics platform using entirely
+open-source components within a single academic semester. The combination of
+Kafka for durable buffering, TimescaleDB for time-series storage, and a
+modern React frontend proved well-suited to the high-velocity,
+enrichment-heavy nature of the GitHub event stream.
+
+Several directions remain for future work:
+
+\begin{itemize}
+  \item \textbf{Stream analytics.} Attaching Apache Flink or Spark
+    Structured Streaming to the \texttt{github.events.raw} topic would
+    enable windowed anomaly detection (e.g., sudden starring spikes) without
+    modifying the existing pipeline.
+  \item \textbf{Granular filtering (O3).} Extending the FastAPI query layer
+    with language, licence, and topic filter parameters and wiring these
+    into a dashboard filter panel would complete the third project objective.
+  \item \textbf{Long-term archival.} A Kafka Connect S3 sink writing Parquet
+    files to object storage would enable cost-efficient historical analysis
+    beyond the 90-day TimescaleDB retention window.
+  \item \textbf{Alerting.} Grafana alerting rules on \texttt{event\_stats\_5m}
+    could notify users when a repository's event velocity exceeds a configurable
+    threshold --- a first step towards automated ``rising star'' detection.
+\end{itemize}
+
+%% ── Acknowledgments ─────────────────────────────────────────────────────────
+\begin{acks}
+The authors thank the PM4 module supervisors at ZHAW School of Engineering
+for their guidance throughout the project.
+\TODO{Add names of supervisors or any other individuals to acknowledge.}
+\end{acks}
+
+%% ── Bibliography ────────────────────────────────────────────────────────────
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{references}
+
+%% ── Appendix ────────────────────────────────────────────────────────────────
+\appendix
+
+\section{Project Timeline}
+
+\begin{table}[H]
+  \caption{Actual project timeline and task allocation}
+  \label{tab:timeline}
+  \begin{tabularx}{\linewidth}{l l X l}
+    \toprule
+    \textbf{Week} & \textbf{Phase} & \textbf{Deliverable} & \textbf{Owner} \\
+    \midrule
+    KW 03 & Setup       & Kafka pipeline, TimescaleDB schema, Docker Compose skeleton
+            & \TODO{name(s)} \\
+    KW 04 & Exploration & GitHub event stream collection, EDA, schema refinement
+            & \TODO{name(s)} \\
+    KW 06 & Pipeline    & Producer, consumer, geo-enrichment, FastAPI endpoints
+            & \TODO{name(s)} \\
+    KW 10 & Dashboard   & Next.js dashboard, Grafana provisioning, SSE live feed
+            & \TODO{name(s)} \\
+    KW 13 & Finalization& Testing, documentation, final report, presentation
+            & All \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{Database Schema}
+\label{appendix:schema}
+
+\begin{table}[H]
+  \caption{Relational schema (simplified)}
+  \label{tab:schema}
+  \begin{tabularx}{\linewidth}{l l X}
+    \toprule
+    \textbf{Table} & \textbf{PK} & \textbf{Key columns} \\
+    \midrule
+    \texttt{events}  & \texttt{(time, event\_id)} &
+      \texttt{event\_type}, \texttt{actor\_username}, \texttt{repo\_id},
+      \texttt{detail}, \texttt{payload} (JSONB).
+      Hypertable: 1-day chunks; 7-day compression; 90-day retention. \\
+    \texttt{users}   & \texttt{username} &
+      \texttt{company}, \texttt{location}, \texttt{country},
+      \texttt{country\_code}, \texttt{lat}, \texttt{lng},
+      \texttt{public\_repos}, \texttt{followers}. \\
+    \texttt{repos}   & \texttt{repo\_id} &
+      \texttt{full\_name}, \texttt{language}, \texttt{topics[]},
+      \texttt{stargazers\_count}, \texttt{forks\_count}. \\
+    \texttt{organizations} & \texttt{login} &
+      \texttt{name}, \texttt{location}, \texttt{is\_verified}. \\
+    \texttt{organization\_members} & \texttt{(org\_login, user\_username)} &
+      \texttt{role}. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\section{Deployment Quick Reference}
+
+\begin{verbatim}
+# 1. Clone and configure
+git clone <repo-url> && cd pm4-github-insights
+cp .env.example .env           # add GITHUB_TOKEN
+
+# 2. Start all services
+docker compose up --build
+
+# 3. Access UIs
+#   http://localhost:3000  Next.js dashboard
+#   http://localhost:8000/docs  FastAPI Swagger UI
+#   http://localhost:3001  Grafana  (admin / admin)
+#   http://localhost:8080  Kafka-UI
+
+# 4. Open a DB session
+docker exec -it timescaledb \
+  psql -U github -d github_events
+\end{verbatim}
+
+See \texttt{docs/RUNBOOK.md} and \texttt{docs/ENV.md} for the full
+operational reference and environment variable documentation.
+
+\end{document}
