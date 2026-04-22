@@ -28,7 +28,7 @@
       "gridPos": {"h": 2, "w": 24, "x": 0, "y": 0},
       "options": {
         "mode": "markdown",
-        "content": "**Window:** last ${hours}h · **alpha:** ${alpha} · **beta:** ${beta} · **language:** ${language} · **license:** ${license} · **topic:** ${topic}"
+        "content": "Repos mit einem ungewöhnlich starken Star/Fork-Anstieg in den letzten **${hours}h**, bewertet nach statistischer Signifikanz. **sig_score** = -ln(1 − Poisson-CDF): je höher, desto unwahrscheinlicher ist der Anstieg durch Zufall. Score ≥ 3 ≈ 95 % Konfidenz. **alpha=${alpha}** gewichtet Stars, **beta=${beta}** Forks. · Filter: language=${language} · license=${license} · topic=${topic}"
       },
       "title": "Context"
     },

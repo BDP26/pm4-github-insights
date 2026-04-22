@@ -28,7 +28,7 @@
       "gridPos": {"h": 2, "w": 24, "x": 0, "y": 0},
       "options": {
         "mode": "markdown",
-        "content": "**Window:** last ${hours}h · Scoring is window-bounded. `total_score` = SUM(sig_score) over user-owned repos with events in the window. `hidden_gem_count` = repos with sig_score ≥ 3. · Filters: lang=${language}, license=${license}, topic=${topic}"
+        "content": "User gerankt nach dem **kombinierten Hidden-Gem-Score** ihrer Repos in den letzten **${hours}h**. **total_score** = Summe aller sig_scores der aktiven Repos eines Users im Zeitfenster. **hidden_gem_count** = Anzahl Repos mit sig_score ≥ 3 (Anstieg mit ~95 % Konfidenz nicht zufällig). · Filter: language=${language} · license=${license} · topic=${topic}"
       },
       "title": "Context"
     },

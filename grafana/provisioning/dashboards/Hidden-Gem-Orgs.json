@@ -28,7 +28,7 @@
       "gridPos": {"h": 2, "w": 24, "x": 0, "y": 0},
       "options": {
         "mode": "markdown",
-        "content": "**Window:** last ${hours}h · `org_*` columns aggregate repos where the organization itself is owner. `member_*` columns aggregate repos owned by the org's members (from `organization_members`). Both are computed over the same window and filter set. · Filters: lang=${language}, license=${license}, topic=${topic}"
+        "content": "Orgs gerankt nach Hidden-Gem-Aktivität in den letzten **${hours}h**. **org_***: Score aus Repos, die die Org direkt besitzt. **member_***: Score aus Repos der Org-Mitglieder (via organization_members-Tabelle). Beide nutzen dasselbe Poisson-Modell (sig_score ≥ 3 = signifikanter Anstieg). · Filter: language=${language} · license=${license} · topic=${topic}"
       },
       "title": "Context"
     },
