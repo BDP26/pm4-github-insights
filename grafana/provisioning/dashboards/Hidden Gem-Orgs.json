@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "Hidden Gem - Users ranked by aggregated significance of their repos",
+  "description": "Hidden Gem - Organizations ranked by org-owned and member-owned repo scores",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -51,10 +51,10 @@
       "keepTime": true,
       "tags": [],
       "targetBlank": false,
-      "title": "Orgs",
+      "title": "Users",
       "tooltip": "",
       "type": "link",
-      "url": "/d/hidden-gem-orgs"
+      "url": "/d/hidden-gem-users"
     }
   ],
   "panels": [
@@ -76,7 +76,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "User gerankt nach dem **kombinierten Hidden-Gem-Score** ihrer Repos in den letzten **${hours}h**. **total_score** = Summe aller sig_scores der aktiven Repos eines Users im Zeitfenster. **hidden_gem_count** = Anzahl Repos mit sig_score ≥ 3 (Anstieg mit ~95 % Konfidenz nicht zufällig). · Filter: language=${language} · license=${license} · topic=${topic}",
+        "content": "Orgs gerankt nach Hidden-Gem-Aktivität in den letzten **${hours}h**. **org_***: Score aus Repos, die die Org direkt besitzt. **member_***: Score aus Repos der Org-Mitglieder (via organization_members-Tabelle). Beide nutzen dasselbe Poisson-Modell (sig_score ≥ 3 = signifikanter Anstieg). · Filter: language=${language} · license=${license} · topic=${topic}",
         "mode": "markdown"
       },
       "pluginVersion": "12.4.2",
@@ -129,7 +129,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 24,
+        "w": 12,
         "x": 0,
         "y": 3
       },
@@ -137,7 +137,7 @@
       "options": {
         "barRadius": 0,
         "barWidth": 0.97,
-        "colorByField": "username",
+        "colorByField": "org_login",
         "fullHighlight": false,
         "groupWidth": 0.7,
         "legend": {
@@ -164,7 +164,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT username, total_score FROM hidden_gem_user_scores(${alpha}::float, ${beta}::float, ${hours}::int, CASE WHEN '${language:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${language:csv}', ',') END, CASE WHEN '${license:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${license:csv}', ',') END, CASE WHEN '${topic:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${topic:csv}', ',') END) ORDER BY total_score DESC NULLS LAST LIMIT 10;",
+          "rawSql": "SELECT org_login, org_repos_total_score FROM hidden_gem_org_scores(${alpha}::float, ${beta}::float, ${hours}::int, CASE WHEN '${language:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${language:csv}', ',') END, CASE WHEN '${license:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${license:csv}', ',') END, CASE WHEN '${topic:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${topic:csv}', ',') END) WHERE org_repos_total_score > 0 ORDER BY org_repos_total_score DESC NULLS LAST LIMIT 10;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -185,7 +185,112 @@
           }
         }
       ],
-      "title": "Top Users by Hidden-Gem Score (current window)",
+      "title": "Top Orgs by Org-Owned-Repo Score",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "github_events_db"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineWidth": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 3
+      },
+      "id": 3,
+      "options": {
+        "barRadius": 0,
+        "barWidth": 0.97,
+        "colorByField": "org_login",
+        "fullHighlight": false,
+        "groupWidth": 0.7,
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "orientation": "auto",
+        "showValue": "auto",
+        "stacking": "normal",
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        },
+        "xTickLabelRotation": -15,
+        "xTickLabelSpacing": 0
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "github_events",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT org_login, member_repos_total_score FROM hidden_gem_org_scores(${alpha}::float, ${beta}::float, ${hours}::int, CASE WHEN '${language:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${language:csv}', ',') END, CASE WHEN '${license:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${license:csv}', ',') END, CASE WHEN '${topic:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${topic:csv}', ',') END) WHERE member_repos_total_score > 0 ORDER BY member_repos_total_score DESC NULLS LAST LIMIT 10;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Top Orgs by Member-Repo Score",
       "type": "barchart"
     },
     {
@@ -235,7 +340,7 @@
         "sortBy": [
           {
             "desc": true,
-            "displayName": "total_score"
+            "displayName": "org_repos_total_score"
           }
         ]
       },
@@ -246,7 +351,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT username, total_score, best_repo_score, best_repo, hidden_gem_count, active_repos_in_window, last_event_in_window FROM hidden_gem_user_scores(${alpha}::float, ${beta}::float, ${hours}::int, CASE WHEN '${language:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${language:csv}', ',') END, CASE WHEN '${license:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${license:csv}', ',') END, CASE WHEN '${topic:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${topic:csv}', ',') END) ORDER BY total_score DESC NULLS LAST;",
+          "rawSql": "SELECT org_login, org_repos_total_score, org_repos_best_score, org_active_repos, org_hidden_gem_count, member_repos_total_score, member_repos_best_score, member_active_repos, member_active_users, member_hidden_gem_count FROM hidden_gem_org_scores(${alpha}::float, ${beta}::float, ${hours}::int, CASE WHEN '${language:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${language:csv}', ',') END, CASE WHEN '${license:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${license:csv}', ',') END, CASE WHEN '${topic:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${topic:csv}', ',') END) ORDER BY (org_repos_total_score + member_repos_total_score) DESC NULLS LAST;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -267,7 +372,7 @@
           }
         }
       ],
-      "title": "User Hidden-Gem Ranking",
+      "title": "Org Hidden-Gem Ranking",
       "type": "table"
     }
   ],
@@ -402,8 +507,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Hidden Gem - Users (Drill-Down)",
-  "uid": "hidden-gem-users",
+  "title": "Hidden Gem - Orgs (Drill-Down)",
+  "uid": "hidden-gem-orgs",
   "version": 6,
   "weekStart": ""
 }

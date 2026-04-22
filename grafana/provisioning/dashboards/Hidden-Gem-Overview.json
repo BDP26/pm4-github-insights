@@ -20,20 +20,68 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "links": [
-    {"title": "Drill-Down: Repos", "type": "link", "url": "/d/hidden-gem-repos", "keepTime": true, "includeVars": true, "targetBlank": false, "asDropdown": false, "tags": [], "tooltip": "", "icon": "external link"},
-    {"title": "Drill-Down: Users", "type": "link", "url": "/d/hidden-gem-users", "keepTime": true, "includeVars": true, "targetBlank": false, "asDropdown": false, "tags": [], "tooltip": "", "icon": "external link"},
-    {"title": "Drill-Down: Orgs",  "type": "link", "url": "/d/hidden-gem-orgs",  "keepTime": true, "includeVars": true, "targetBlank": false, "asDropdown": false, "tags": [], "tooltip": "", "icon": "external link"}
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Drill-Down: Repos",
+      "tooltip": "",
+      "type": "link",
+      "url": "/d/hidden-gem-repos"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Drill-Down: Users",
+      "tooltip": "",
+      "type": "link",
+      "url": "/d/hidden-gem-users"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Drill-Down: Orgs",
+      "tooltip": "",
+      "type": "link",
+      "url": "/d/hidden-gem-orgs"
+    }
   ],
   "panels": [
     {
-      "type": "text",
-      "id": 99,
-      "gridPos": {"h": 2, "w": 24, "x": 0, "y": 0},
-      "options": {
-        "mode": "markdown",
-        "content": "Repos mit einem ungewöhnlich starken Star/Fork-Anstieg in den letzten **${hours}h**, bewertet nach statistischer Signifikanz. Das **sig_score**-Modell basiert auf Poisson: Wie unwahrscheinlich ist dieser Anstieg gegeben der normalen Rate des Repos? Score ≥ 3 ≈ 95 % Konfidenz, dass der Anstieg nicht zufällig ist. **alpha=${alpha}** gewichtet Stars, **beta=${beta}** Forks. Drill-Down: → Repos · Users · Orgs"
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
       },
-      "title": "Context"
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 99,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "Repos mit einem ungewöhnlich starken Star/Fork-Anstieg in den letzten **${hours}h**, bewertet nach statistischer Signifikanz. Das **sig_score**-Modell basiert auf Poisson: Wie unwahrscheinlich ist dieser Anstieg gegeben der normalen Rate des Repos? Score ≥ 3 ≈ 95 % Konfidenz, dass der Anstieg nicht zufällig ist. **alpha=${alpha}** gewichtet Stars, **beta=${beta}** Forks. Drill-Down: → Repos · Users · Orgs",
+        "mode": "markdown"
+      },
+      "pluginVersion": "12.4.2",
+      "title": "Context",
+      "type": "text"
     },
     {
       "datasource": {
@@ -87,7 +135,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 2
+        "y": 4
       },
       "id": 2,
       "options": {
@@ -187,7 +235,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 2
+        "y": 4
       },
       "id": 1,
       "options": {
@@ -288,6 +336,6 @@
   "timezone": "browser",
   "title": "Hidden Gem",
   "uid": "adj2x5m",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
