@@ -28,7 +28,7 @@
       "gridPos": {"h": 2, "w": 24, "x": 0, "y": 0},
       "options": {
         "mode": "markdown",
-        "content": "**Window:** last ${hours}h \u00b7 **alpha:** ${alpha} \u00b7 **beta:** ${beta} \u00b7 **language:** ${language} \u00b7 **license:** ${license} \u00b7 **topic:** ${topic}"
+        "content": "**Window:** last ${hours}h · **alpha:** ${alpha} · **beta:** ${beta} · **language:** ${language} · **license:** ${license} · **topic:** ${topic}"
       },
       "title": "Context"
     },
@@ -66,7 +66,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT full_name AS repository_path, sig_score AS significance_score FROM hidden_gem_repo_scores(${alpha}::float, ${beta}::float, ${hours}::int, ARRAY(SELECT jsonb_array_elements_text($gj$${language:json}$gj$::jsonb))::text[], ARRAY(SELECT jsonb_array_elements_text($gj$${license:json}$gj$::jsonb))::text[], ARRAY(SELECT jsonb_array_elements_text($gj$${topic:json}$gj$::jsonb))::text[]) WHERE sig_score IS NOT NULL ORDER BY sig_score DESC NULLS LAST LIMIT 10;",
+          "rawSql": "SELECT full_name AS repository_path, sig_score AS significance_score FROM hidden_gem_repo_scores(${alpha}::float, ${beta}::float, ${hours}::int, CASE WHEN '${language:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${language:csv}', ',') END, CASE WHEN '${license:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${license:csv}', ',') END, CASE WHEN '${topic:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${topic:csv}', ',') END) WHERE sig_score IS NOT NULL ORDER BY sig_score DESC NULLS LAST LIMIT 10;",
           "refId": "A",
           "sql": {"columns": [{"parameters": [], "type": "function"}], "groupBy": [{"property": {"type": "string"}, "type": "groupBy"}], "limit": 50}
         }
@@ -98,7 +98,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT repo_id::text, name AS repository_name, full_name AS repository_path, language, license_spdx, count_stars_interval, count_forks_interval, poisson_cdf, sig_score AS significance_score, last_event_in_window FROM hidden_gem_repo_scores(${alpha}::float, ${beta}::float, ${hours}::int, ARRAY(SELECT jsonb_array_elements_text($gj$${language:json}$gj$::jsonb))::text[], ARRAY(SELECT jsonb_array_elements_text($gj$${license:json}$gj$::jsonb))::text[], ARRAY(SELECT jsonb_array_elements_text($gj$${topic:json}$gj$::jsonb))::text[]) WHERE sig_score IS NOT NULL ORDER BY sig_score DESC NULLS LAST;",
+          "rawSql": "SELECT repo_id::text, name AS repository_name, full_name AS repository_path, language, license_spdx, count_stars_interval, count_forks_interval, poisson_cdf, sig_score AS significance_score, last_event_in_window FROM hidden_gem_repo_scores(${alpha}::float, ${beta}::float, ${hours}::int, CASE WHEN '${language:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${language:csv}', ',') END, CASE WHEN '${license:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${license:csv}', ',') END, CASE WHEN '${topic:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${topic:csv}', ',') END) WHERE sig_score IS NOT NULL ORDER BY sig_score DESC NULLS LAST;",
           "refId": "A",
           "sql": {"columns": [{"parameters": [], "type": "function"}], "groupBy": [{"property": {"type": "string"}, "type": "groupBy"}], "limit": 50}
         }
@@ -115,9 +115,9 @@
       {"current": {"text": "1.0", "value": "1.0"}, "description": "weight stars", "name": "alpha", "options": [], "query": "0.5, 0.75, 1.0, 1.25, 1.5, 2.0", "type": "custom", "valuesFormat": "csv"},
       {"current": {"text": "1.0", "value": "1.0"}, "description": "weight forks", "name": "beta",  "options": [], "query": "0.5, 0.75, 1.0, 1.25, 1.5, 2.0", "type": "custom", "valuesFormat": "csv"},
       {"current": {"text": "96",  "value": "96"},  "description": "Timeframe (last X hours)", "label": "Timeframe", "name": "hours", "options": [], "query": "1, 2, 6, 12, 24, 48, 72, 96", "type": "custom", "valuesFormat": "csv"},
-      {"name": "language", "label": "Language", "type": "query", "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"}, "query": "SELECT value FROM v_repo_languages ORDER BY 1", "definition": "SELECT value FROM v_repo_languages ORDER BY 1", "multi": true, "includeAll": true, "allValue": null, "refresh": 1, "sort": 1, "current": {"text": ["All"], "value": ["$__all"]}, "options": []},
-      {"name": "license",  "label": "License",  "type": "query", "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"}, "query": "SELECT value FROM v_repo_licenses ORDER BY 1",  "definition": "SELECT value FROM v_repo_licenses ORDER BY 1",  "multi": true, "includeAll": true, "allValue": null, "refresh": 1, "sort": 1, "current": {"text": ["All"], "value": ["$__all"]}, "options": []},
-      {"name": "topic",    "label": "Topic",    "type": "query", "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"}, "query": "SELECT value FROM v_repo_topics ORDER BY 1",    "definition": "SELECT value FROM v_repo_topics ORDER BY 1",    "multi": true, "includeAll": true, "allValue": null, "refresh": 1, "sort": 1, "current": {"text": ["All"], "value": ["$__all"]}, "options": []}
+      {"name": "language", "label": "Language", "type": "query", "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"}, "query": "SELECT DISTINCT r.language AS value FROM events e JOIN repos r ON r.repo_id = e.repo_id WHERE e.time >= NOW() - (${hours} || ' hours')::interval AND r.language IS NOT NULL ORDER BY 1", "definition": "SELECT DISTINCT r.language AS value FROM events e JOIN repos r ON r.repo_id = e.repo_id WHERE e.time >= NOW() - (${hours} || ' hours')::interval AND r.language IS NOT NULL ORDER BY 1", "multi": true, "includeAll": true, "allValue": "__all__", "refresh": 1, "sort": 1, "current": {"text": ["All"], "value": ["$__all"]}, "options": []},
+      {"name": "license",  "label": "License",  "type": "query", "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"}, "query": "SELECT DISTINCT r.license_spdx AS value FROM events e JOIN repos r ON r.repo_id = e.repo_id WHERE e.time >= NOW() - (${hours} || ' hours')::interval AND r.license_spdx IS NOT NULL ORDER BY 1",  "definition": "SELECT DISTINCT r.license_spdx AS value FROM events e JOIN repos r ON r.repo_id = e.repo_id WHERE e.time >= NOW() - (${hours} || ' hours')::interval AND r.license_spdx IS NOT NULL ORDER BY 1",  "multi": true, "includeAll": true, "allValue": "__all__", "refresh": 1, "sort": 1, "current": {"text": ["All"], "value": ["$__all"]}, "options": []},
+      {"name": "topic",    "label": "Topic",    "type": "query", "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"}, "query": "SELECT DISTINCT unnest(r.topics) AS value FROM events e JOIN repos r ON r.repo_id = e.repo_id WHERE e.time >= NOW() - (${hours} || ' hours')::interval AND r.topics IS NOT NULL ORDER BY 1",    "definition": "SELECT DISTINCT unnest(r.topics) AS value FROM events e JOIN repos r ON r.repo_id = e.repo_id WHERE e.time >= NOW() - (${hours} || ' hours')::interval AND r.topics IS NOT NULL ORDER BY 1",    "multi": true, "includeAll": true, "allValue": "__all__", "refresh": 1, "sort": 1, "current": {"text": ["All"], "value": ["$__all"]}, "options": []}
     ]
   },
   "time": {"from": "now-6h", "to": "now"},
