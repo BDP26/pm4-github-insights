@@ -3,7 +3,10 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -17,33 +20,119 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "links": [
-    {"title": "Overview", "type": "link", "url": "/d/adj2x5m",          "keepTime": true, "includeVars": true, "targetBlank": false, "asDropdown": false, "tags": [], "tooltip": "", "icon": "external link"},
-    {"title": "Repos",    "type": "link", "url": "/d/hidden-gem-repos", "keepTime": true, "includeVars": true, "targetBlank": false, "asDropdown": false, "tags": [], "tooltip": "", "icon": "external link"},
-    {"title": "Orgs",     "type": "link", "url": "/d/hidden-gem-orgs",  "keepTime": true, "includeVars": true, "targetBlank": false, "asDropdown": false, "tags": [], "tooltip": "", "icon": "external link"}
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Overview",
+      "tooltip": "",
+      "type": "link",
+      "url": "/d/adj2x5m"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Repos",
+      "tooltip": "",
+      "type": "link",
+      "url": "/d/hidden-gem-repos"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Orgs",
+      "tooltip": "",
+      "type": "link",
+      "url": "/d/hidden-gem-orgs"
+    }
   ],
   "panels": [
     {
-      "type": "text",
-      "id": 99,
-      "gridPos": {"h": 2, "w": 24, "x": 0, "y": 0},
-      "options": {
-        "mode": "markdown",
-        "content": "**Window:** last ${hours}h \u00b7 Scoring is window-bounded. `total_score` = SUM(sig_score) over user-owned repos with events in the window. `hidden_gem_count` = repos with sig_score \u2265 3. \u00b7 Filters: lang=${language}, license=${license}, topic=${topic}"
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
       },
-      "title": "Context"
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 99,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "User gerankt nach dem **kombinierten Hidden-Gem-Score** ihrer Repos in den letzten **${hours}h**. **total_score** = Summe aller sig_scores der aktiven Repos eines Users im Zeitfenster. **hidden_gem_count** = Anzahl Repos mit sig_score ≥ 3 (Anstieg mit ~95 % Konfidenz nicht zufällig). · Filter: language=${language} · license=${license} · topic=${topic}",
+        "mode": "markdown"
+      },
+      "pluginVersion": "12.4.2",
+      "title": "Context",
+      "type": "text"
     },
     {
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"},
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "github_events_db"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "palette-classic"},
-          "custom": {"fillOpacity": 80, "lineWidth": 1, "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisLabel": "", "axisPlacement": "auto", "gradientMode": "none", "hideFrom": {"legend": false, "tooltip": false, "viz": false}, "scaleDistribution": {"type": "linear"}, "thresholdsStyle": {"mode": "off"}},
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineWidth": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
           "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": 0}]}
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 2},
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 3
+      },
       "id": 2,
       "options": {
         "barRadius": 0,
@@ -51,11 +140,20 @@
         "colorByField": "username",
         "fullHighlight": false,
         "groupWidth": 0.7,
-        "legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true},
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
         "orientation": "auto",
         "showValue": "auto",
         "stacking": "normal",
-        "tooltip": {"hideZeros": false, "mode": "single", "sort": "none"},
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        },
         "xTickLabelRotation": -15,
         "xTickLabelSpacing": 0
       },
@@ -66,29 +164,81 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT username, total_score FROM hidden_gem_user_scores(${alpha}::float, ${beta}::float, ${hours}::int, ARRAY(SELECT jsonb_array_elements_text($gj$${language:json}$gj$::jsonb))::text[], ARRAY(SELECT jsonb_array_elements_text($gj$${license:json}$gj$::jsonb))::text[], ARRAY(SELECT jsonb_array_elements_text($gj$${topic:json}$gj$::jsonb))::text[]) ORDER BY total_score DESC NULLS LAST LIMIT 10;",
+          "rawSql": "SELECT username, total_score FROM hidden_gem_user_scores(${alpha}::float, ${beta}::float, ${hours}::int, CASE WHEN '${language:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${language:csv}', ',') END, CASE WHEN '${license:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${license:csv}', ',') END, CASE WHEN '${topic:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${topic:csv}', ',') END) ORDER BY total_score DESC NULLS LAST LIMIT 10;",
           "refId": "A",
-          "sql": {"columns": [{"parameters": [], "type": "function"}], "groupBy": [{"property": {"type": "string"}, "type": "groupBy"}], "limit": 50}
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
       "title": "Top Users by Hidden-Gem Score (current window)",
       "type": "barchart"
     },
     {
-      "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"},
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "github_events_db"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": {"mode": "thresholds"},
-          "custom": {"align": "auto", "cellOptions": {"type": "auto"}, "footer": {"reducers": []}, "inspect": false},
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
           "decimals": 4,
           "mappings": [],
-          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": 0}]}
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
         },
         "overrides": []
       },
-      "gridPos": {"h": 12, "w": 24, "x": 0, "y": 10},
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
       "id": 1,
-      "options": {"cellHeight": "sm", "showHeader": true, "sortBy": [{"desc": true, "displayName": "total_score"}]},
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "total_score"
+          }
+        ]
+      },
       "pluginVersion": "12.4.2",
       "targets": [
         {
@@ -96,9 +246,25 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT username, total_score, best_repo_score, best_repo, hidden_gem_count, active_repos_in_window, last_event_in_window FROM hidden_gem_user_scores(${alpha}::float, ${beta}::float, ${hours}::int, ARRAY(SELECT jsonb_array_elements_text($gj$${language:json}$gj$::jsonb))::text[], ARRAY(SELECT jsonb_array_elements_text($gj$${license:json}$gj$::jsonb))::text[], ARRAY(SELECT jsonb_array_elements_text($gj$${topic:json}$gj$::jsonb))::text[]) ORDER BY total_score DESC NULLS LAST;",
+          "rawSql": "SELECT username, total_score, best_repo_score, best_repo, hidden_gem_count, active_repos_in_window, last_event_in_window FROM hidden_gem_user_scores(${alpha}::float, ${beta}::float, ${hours}::int, CASE WHEN '${language:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${language:csv}', ',') END, CASE WHEN '${license:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${license:csv}', ',') END, CASE WHEN '${topic:csv}' = '__all__' THEN NULL::text[] ELSE string_to_array('${topic:csv}', ',') END) ORDER BY total_score DESC NULLS LAST;",
           "refId": "A",
-          "sql": {"columns": [{"parameters": [], "type": "function"}], "groupBy": [{"property": {"type": "string"}, "type": "groupBy"}], "limit": 50}
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
       "title": "User Hidden-Gem Ranking",
@@ -107,22 +273,185 @@
   ],
   "preload": false,
   "schemaVersion": 42,
-  "tags": ["hidden-gem", "drill-down"],
+  "tags": [
+    "hidden-gem",
+    "drill-down"
+  ],
   "templating": {
     "list": [
-      {"current": {"text": "1.0", "value": "1.0"}, "description": "weight stars", "name": "alpha", "options": [], "query": "0.5, 0.75, 1.0, 1.25, 1.5, 2.0", "type": "custom", "valuesFormat": "csv"},
-      {"current": {"text": "1.0", "value": "1.0"}, "description": "weight forks", "name": "beta",  "options": [], "query": "0.5, 0.75, 1.0, 1.25, 1.5, 2.0", "type": "custom", "valuesFormat": "csv"},
-      {"current": {"text": "96",  "value": "96"},  "description": "Timeframe (last X hours)", "label": "Timeframe", "name": "hours", "options": [], "query": "1, 2, 6, 12, 24, 48, 72, 96", "type": "custom", "valuesFormat": "csv"},
-      {"name": "language", "label": "Language", "type": "query", "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"}, "query": "SELECT value FROM v_repo_languages ORDER BY 1", "definition": "SELECT value FROM v_repo_languages ORDER BY 1", "multi": true, "includeAll": true, "allValue": null, "refresh": 1, "sort": 1, "current": {"text": ["All"], "value": ["$__all"]}, "options": []},
-      {"name": "license",  "label": "License",  "type": "query", "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"}, "query": "SELECT value FROM v_repo_licenses ORDER BY 1",  "definition": "SELECT value FROM v_repo_licenses ORDER BY 1",  "multi": true, "includeAll": true, "allValue": null, "refresh": 1, "sort": 1, "current": {"text": ["All"], "value": ["$__all"]}, "options": []},
-      {"name": "topic",    "label": "Topic",    "type": "query", "datasource": {"type": "grafana-postgresql-datasource", "uid": "github_events_db"}, "query": "SELECT value FROM v_repo_topics ORDER BY 1",    "definition": "SELECT value FROM v_repo_topics ORDER BY 1",    "multi": true, "includeAll": true, "allValue": null, "refresh": 1, "sort": 1, "current": {"text": ["All"], "value": ["$__all"]}, "options": []}
+      {
+        "current": {
+          "text": "1.0",
+          "value": "1.0"
+        },
+        "description": "weight stars",
+        "name": "alpha",
+        "options": [],
+        "query": "0.5, 0.75, 1.0, 1.25, 1.5, 2.0",
+        "type": "custom",
+        "valuesFormat": "csv"
+      },
+      {
+        "current": {
+          "text": "1.0",
+          "value": "1.0"
+        },
+        "description": "weight forks",
+        "name": "beta",
+        "options": [],
+        "query": "0.5, 0.75, 1.0, 1.25, 1.5, 2.0",
+        "type": "custom",
+        "valuesFormat": "csv"
+      },
+      {
+        "current": {
+          "text": "96",
+          "value": "96"
+        },
+        "description": "Timeframe (last X hours)",
+        "label": "Timeframe",
+        "name": "hours",
+        "options": [],
+        "query": "1, 2, 6, 12, 24, 48, 72, 96",
+        "type": "custom",
+        "valuesFormat": "csv"
+      },
+      {
+        "allValue": "__all__",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "github_events_db"
+        },
+        "definition": "SELECT \n    r.language AS value\nFROM events e \nJOIN repos r ON r.repo_id = e.repo_id\nWHERE \n    e.time >= NOW() - make_interval(hours => ${hours}::int) \n    AND r.language IS NOT NULL\nGROUP BY r.language\nORDER BY COUNT(*) DESC\nLIMIT 50;",
+        "description": "Top 50 occurring programming languages",
+        "includeAll": true,
+        "label": "Language",
+        "multi": true,
+        "name": "language",
+        "options": [],
+        "query": {
+          "editorMode": "code",
+          "format": "table",
+          "query": "SELECT \n    r.language AS value\nFROM events e \nJOIN repos r ON r.repo_id = e.repo_id\nWHERE \n    e.time >= NOW() - make_interval(hours => ${hours}::int) \n    AND r.language IS NOT NULL\nGROUP BY r.language\nORDER BY COUNT(*) DESC\nLIMIT 50;",
+          "rawQuery": true,
+          "rawSql": "SELECT \n    r.language AS value\nFROM events e \nJOIN repos r ON r.repo_id = e.repo_id\nWHERE \n    e.time >= NOW() - make_interval(hours => ${hours}::int) \n    AND r.language IS NOT NULL\nGROUP BY r.language\nORDER BY COUNT(*) DESC\nLIMIT 50;",
+          "refId": "SQLVariableQueryEditor-VariableQuery",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        "refresh": 1,
+        "regexApplyTo": "value",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": "__all__",
+        "current": {
+          "text": "All",
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "github_events_db"
+        },
+        "definition": "SELECT DISTINCT r.license_spdx AS value FROM events e JOIN repos r ON r.repo_id = e.repo_id WHERE e.time >= NOW() - make_interval(hours => ${hours}::int) AND r.license_spdx IS NOT NULL ORDER BY 1",
+        "includeAll": true,
+        "label": "License",
+        "multi": true,
+        "name": "license",
+        "options": [],
+        "query": "SELECT DISTINCT r.license_spdx AS value FROM events e JOIN repos r ON r.repo_id = e.repo_id WHERE e.time >= NOW() - make_interval(hours => ${hours}::int) AND r.license_spdx IS NOT NULL ORDER BY 1",
+        "refresh": 1,
+        "regexApplyTo": "value",
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": "__all__",
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "github_events_db"
+        },
+        "definition": "SELECT \n    t.topic AS value\nFROM events e \nJOIN repos r ON r.repo_id = e.repo_id,\nLATERAL unnest(r.topics) AS t(topic)\nWHERE \n    e.time >= NOW() - make_interval(hours => ${hours}::int) \n    AND r.topics IS NOT NULL\nGROUP BY t.topic\nORDER BY COUNT(*) DESC\nLIMIT 100;",
+        "description": "Top 100 occurring topics",
+        "includeAll": true,
+        "label": "Topic",
+        "multi": true,
+        "name": "topic",
+        "options": [],
+        "query": {
+          "editorMode": "code",
+          "format": "table",
+          "query": "SELECT \n    t.topic AS value\nFROM events e \nJOIN repos r ON r.repo_id = e.repo_id,\nLATERAL unnest(r.topics) AS t(topic)\nWHERE \n    e.time >= NOW() - make_interval(hours => ${hours}::int) \n    AND r.topics IS NOT NULL\nGROUP BY t.topic\nORDER BY COUNT(*) DESC\nLIMIT 100;",
+          "rawQuery": true,
+          "rawSql": "SELECT \n    t.topic AS value\nFROM events e \nJOIN repos r ON r.repo_id = e.repo_id,\nLATERAL unnest(r.topics) AS t(topic)\nWHERE \n    e.time >= NOW() - make_interval(hours => ${hours}::int) \n    AND r.topics IS NOT NULL\nGROUP BY t.topic\nORDER BY COUNT(*) DESC\nLIMIT 100;",
+          "refId": "SQLVariableQueryEditor-VariableQuery",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        "refresh": 1,
+        "regexApplyTo": "value",
+        "sort": 1,
+        "type": "query"
+      }
     ]
   },
-  "time": {"from": "now-6h", "to": "now"},
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "browser",
   "title": "Hidden Gem - Users (Drill-Down)",
   "uid": "hidden-gem-users",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
