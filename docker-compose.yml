@@ -91,6 +91,7 @@ services:
     image: timescale/timescaledb:latest-pg16
     container_name: timescaledb
     networks: [github-stream]
+    shm_size: '2gb'
     ports:
       - "5432:5432"
     volumes:
