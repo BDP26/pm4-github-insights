@@ -3,6 +3,7 @@ Hidden Gems Router
 ──────────────────
 All /api/hidden-gems/* endpoints.
 """
+import asyncio
 import logging
 from typing import Any
 
@@ -12,7 +13,12 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 # ── Caches ────────────────────────────────────────────────────────────────────
 _filter_cache: TTLCache = TTLCache(maxsize=128, ttl=300)   # 5 minutes
-_live_cache:   TTLCache = TTLCache(maxsize=256, ttl=30)    # 30 seconds
+_live_cache:   TTLCache = TTLCache(maxsize=256, ttl=30)    # 30 seconds — wired in get_live
+
+# ── Filter locks (one per endpoint — double-checked locking) ──────────────────
+_filter_lock_languages = asyncio.Lock()
+_filter_lock_licenses  = asyncio.Lock()
+_filter_lock_topics    = asyncio.Lock()
 
 log = logging.getLogger(__name__)
 
@@ -34,22 +40,25 @@ async def get_languages(
     cache_key = ("languages", hours, limit)
     if cache_key in _filter_cache:
         return _filter_cache[cache_key]
-    async with _pool(request).acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT r.language AS value
-            FROM events e
-            JOIN repos r ON r.repo_id = e.repo_id
-            WHERE e.time >= NOW() - make_interval(hours => $1::int)
-              AND r.language IS NOT NULL
-            GROUP BY r.language
-            ORDER BY COUNT(*) DESC
-            LIMIT $2
-            """,
-            hours, limit,
-        )
-    result = [r["value"] for r in rows]
-    _filter_cache[cache_key] = result
+    async with _filter_lock_languages:
+        if cache_key in _filter_cache:   # double-check after acquiring lock
+            return _filter_cache[cache_key]
+        async with _pool(request).acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT r.language AS value
+                FROM events e
+                JOIN repos r ON r.repo_id = e.repo_id
+                WHERE e.time >= NOW() - make_interval(hours => $1::int)
+                  AND r.language IS NOT NULL
+                GROUP BY r.language
+                ORDER BY COUNT(*) DESC
+                LIMIT $2
+                """,
+                hours, limit,
+            )
+        result = [r["value"] for r in rows]
+        _filter_cache[cache_key] = result
     return result
 
 
@@ -62,22 +71,25 @@ async def get_licenses(
     cache_key = ("licenses", hours, limit)
     if cache_key in _filter_cache:
         return _filter_cache[cache_key]
-    async with _pool(request).acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT r.license_spdx AS value
-            FROM events e
-            JOIN repos r ON r.repo_id = e.repo_id
-            WHERE e.time >= NOW() - make_interval(hours => $1::int)
-              AND r.license_spdx IS NOT NULL
-            GROUP BY r.license_spdx
-            ORDER BY COUNT(*) DESC
-            LIMIT $2
-            """,
-            hours, limit,
-        )
-    result = [r["value"] for r in rows]
-    _filter_cache[cache_key] = result
+    async with _filter_lock_licenses:
+        if cache_key in _filter_cache:   # double-check after acquiring lock
+            return _filter_cache[cache_key]
+        async with _pool(request).acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT r.license_spdx AS value
+                FROM events e
+                JOIN repos r ON r.repo_id = e.repo_id
+                WHERE e.time >= NOW() - make_interval(hours => $1::int)
+                  AND r.license_spdx IS NOT NULL
+                GROUP BY r.license_spdx
+                ORDER BY COUNT(*) DESC
+                LIMIT $2
+                """,
+                hours, limit,
+            )
+        result = [r["value"] for r in rows]
+        _filter_cache[cache_key] = result
     return result
 
 
@@ -90,23 +102,26 @@ async def get_topics(
     cache_key = ("topics", hours, limit)
     if cache_key in _filter_cache:
         return _filter_cache[cache_key]
-    async with _pool(request).acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT t.value
-            FROM events e
-            JOIN repos r ON r.repo_id = e.repo_id
-            JOIN LATERAL unnest(r.topics) AS t(value) ON true
-            WHERE e.time >= NOW() - make_interval(hours => $1::int)
-              AND r.topics IS NOT NULL
-            GROUP BY t.value
-            ORDER BY COUNT(*) DESC
-            LIMIT $2
-            """,
-            hours, limit,
-        )
-    result = [r["value"] for r in rows]
-    _filter_cache[cache_key] = result
+    async with _filter_lock_topics:
+        if cache_key in _filter_cache:   # double-check after acquiring lock
+            return _filter_cache[cache_key]
+        async with _pool(request).acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT t.value
+                FROM events e
+                JOIN repos r ON r.repo_id = e.repo_id
+                JOIN LATERAL unnest(r.topics) AS t(value) ON true
+                WHERE e.time >= NOW() - make_interval(hours => $1::int)
+                  AND r.topics IS NOT NULL
+                GROUP BY t.value
+                ORDER BY COUNT(*) DESC
+                LIMIT $2
+                """,
+                hours, limit,
+            )
+        result = [r["value"] for r in rows]
+        _filter_cache[cache_key] = result
     return result
 
 

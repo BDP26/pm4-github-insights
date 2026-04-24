@@ -35,10 +35,8 @@ def client(mock_conn):
     return TestClient(app), mock_conn
 
 
-def _row(value: str):
-    r = MagicMock()
-    r.__getitem__ = lambda self, k: value
-    return r
+def _row(value: str) -> dict:
+    return {"value": value}
 
 
 def test_get_languages_returns_list_of_strings(client):
@@ -95,3 +93,55 @@ def test_get_topics_default_limit_is_200(client):
     test_client.get("/api/hidden-gems/filters/topics")
     _sql, _hours, limit_arg = conn.fetch.call_args[0]
     assert limit_arg == 200
+
+
+# ── Licenses (additional) ─────────────────────────────────────────────────────
+
+def test_get_licenses_returns_list_of_strings(client):
+    test_client, conn = client
+    conn.fetch.return_value = [_row("MIT"), _row("Apache-2.0")]
+    resp = test_client.get("/api/hidden-gems/filters/licenses")
+    assert resp.status_code == 200
+    assert resp.json() == ["MIT", "Apache-2.0"]
+
+
+def test_get_licenses_forwards_hours(client):
+    test_client, conn = client
+    conn.fetch.return_value = []
+    test_client.get("/api/hidden-gems/filters/licenses?hours=24")
+    _sql, hours_arg, limit_arg = conn.fetch.call_args[0]
+    assert hours_arg == 24
+
+
+def test_get_licenses_cache_hit_skips_db(client):
+    test_client, conn = client
+    conn.fetch.return_value = [_row("MIT")]
+    test_client.get("/api/hidden-gems/filters/licenses")
+    test_client.get("/api/hidden-gems/filters/licenses")
+    assert conn.fetch.call_count == 1
+
+
+# ── Topics (additional) ───────────────────────────────────────────────────────
+
+def test_get_topics_returns_list_of_strings(client):
+    test_client, conn = client
+    conn.fetch.return_value = [_row("machine-learning"), _row("python")]
+    resp = test_client.get("/api/hidden-gems/filters/topics")
+    assert resp.status_code == 200
+    assert resp.json() == ["machine-learning", "python"]
+
+
+def test_get_topics_forwards_hours(client):
+    test_client, conn = client
+    conn.fetch.return_value = []
+    test_client.get("/api/hidden-gems/filters/topics?hours=730")
+    _sql, hours_arg, limit_arg = conn.fetch.call_args[0]
+    assert hours_arg == 730
+
+
+def test_get_topics_cache_hit_skips_db(client):
+    test_client, conn = client
+    conn.fetch.return_value = [_row("cli")]
+    test_client.get("/api/hidden-gems/filters/topics")
+    test_client.get("/api/hidden-gems/filters/topics")
+    assert conn.fetch.call_count == 1
