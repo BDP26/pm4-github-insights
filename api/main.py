@@ -29,6 +29,8 @@ import asyncpg
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from routers.hidden_gems import router as hidden_gems_router
+from scheduler import SnapshotConfig, SnapshotScheduler
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,6 +46,19 @@ DB_USER     = os.getenv("DB_USER", "github")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "github_secret")
 
 pool: asyncpg.Pool | None = None
+
+
+def _snapshot_config_from_env() -> SnapshotConfig:
+    raw = os.getenv("SNAPSHOT_INTERVALS", "24,168,730")
+    intervals = [int(x.strip()) for x in raw.split(",") if x.strip()]
+    return SnapshotConfig(
+        interval_hours=intervals,
+        alpha=float(os.getenv("SNAPSHOT_ALPHA", "1.0")),
+        beta=float(os.getenv("SNAPSHOT_BETA", "1.0")),
+        min_stars=int(os.getenv("SNAPSHOT_MIN_STARS", "5")),
+        min_forks=int(os.getenv("SNAPSHOT_MIN_FORKS", "1")),
+        top_n=int(os.getenv("SNAPSHOT_TOP_N", "1000")),
+    )
 
 
 # ── DB pool with retry ────────────────────────────────────────────────────────
@@ -71,7 +86,15 @@ async def create_pool_with_retry() -> asyncpg.Pool:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global pool
     pool = await create_pool_with_retry()
+    app.state.pool = pool
+
+    scheduler = SnapshotScheduler(pool, _snapshot_config_from_env())
+    app.state.snapshot_scheduler = scheduler
+    await scheduler.start()
+
     yield
+
+    await scheduler.stop()
     await pool.close()
 
 
@@ -84,6 +107,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(hidden_gems_router)
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
