@@ -169,11 +169,11 @@ async def get_kpis() -> dict[str, Any]:
 
         # ── Active contributors — current & previous 30-day window
         contributors_now: int = await conn.fetchval(
-            "SELECT count(DISTINCT actor) FROM events WHERE time >= $1",
+            "SELECT count(DISTINCT actor_username) FROM events WHERE time >= $1",
             since_30d,
         )
         contributors_prev: int = await conn.fetchval(
-            "SELECT count(DISTINCT actor) FROM events WHERE time >= $1 AND time < $2",
+            "SELECT count(DISTINCT actor_username) FROM events WHERE time >= $1 AND time < $2",
             since_60d,
             since_30d,
         )
@@ -183,14 +183,14 @@ async def get_kpis() -> dict[str, Any]:
             """
             WITH pr_times AS (
                 SELECT
-                    repo,
+                    repo_id,
                     payload->>'number'                                               AS pr_num,
                     MIN(CASE WHEN payload->>'action' = 'opened' THEN time END)      AS opened_at,
                     MAX(CASE WHEN payload->>'action' = 'closed' THEN time END)      AS closed_at
                 FROM   events
                 WHERE  event_type = 'PullRequestEvent'
                   AND  time >= $1
-                GROUP  BY repo, payload->>'number'
+                GROUP  BY repo_id, payload->>'number'
             )
             SELECT ROUND(
                 AVG(EXTRACT(EPOCH FROM (closed_at - opened_at)) / 3600)::numeric,
@@ -262,7 +262,7 @@ async def get_top_repos(
 
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT repo, events FROM v_top_repos_24h LIMIT $1",
+            "SELECT full_name AS repo, events FROM v_top_repos_24h LIMIT $1",
             limit,
         )
 
@@ -279,8 +279,13 @@ async def get_recent_events(
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT time, event_id, event_type, actor, repo, detail
-            FROM   v_recent_events
+            SELECT e.time, e.event_id, e.event_type,
+                   e.actor_username AS actor,
+                   r.full_name      AS repo,
+                   e.detail
+            FROM   events e
+            JOIN   repos r ON e.repo_id = r.repo_id
+            ORDER  BY e.time DESC
             LIMIT  $1
             """,
             limit,
@@ -315,10 +320,14 @@ async def stream_events() -> StreamingResponse:
                 async with pool.acquire() as conn:
                     rows = await conn.fetch(
                         """
-                        SELECT time, event_id, event_type, actor, repo, detail
-                        FROM   events
-                        WHERE  time > $1
-                        ORDER  BY time ASC
+                        SELECT e.time, e.event_id, e.event_type,
+                               e.actor_username AS actor,
+                               r.full_name      AS repo,
+                               e.detail
+                        FROM   events e
+                        JOIN   repos r ON e.repo_id = r.repo_id
+                        WHERE  e.time > $1
+                        ORDER  BY e.time ASC
                         LIMIT  50
                         """,
                         last_seen,
