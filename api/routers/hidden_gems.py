@@ -54,6 +54,9 @@ async def get_live(
     page: int = Query(1, ge=1),
     limit: int = Query(25, ge=1, le=100),
 ) -> dict[str, Any]:
+    if scope not in {"repos", "users", "orgs"}:
+        raise HTTPException(status_code=422, detail="scope must be one of: repos, users, orgs")
+
     offset = (page - 1) * limit
     lang_arr  = language or None
     lic_arr   = license  or None
@@ -188,7 +191,7 @@ async def search(
 async def get_repo_detail(
     request: Request,
     full_name: str,
-    interval_hours: int = Query(168),
+    interval_hours: int = Query(168, ge=1, le=8760),
 ) -> dict[str, Any]:
     async with _pool(request).acquire() as conn:
         live_rows = await conn.fetch(
@@ -220,6 +223,9 @@ async def get_repo_detail(
             full_name, interval_hours,
         )
 
+    if current is None and not history:
+        raise HTTPException(status_code=404, detail=f"Repo '{full_name}' not found")
+
     return {
         "full_name": full_name,
         "current": current,
@@ -245,7 +251,7 @@ async def get_repo_detail(
 async def get_user_detail(
     request: Request,
     username: str,
-    interval_hours: int = Query(168),
+    interval_hours: int = Query(168, ge=1, le=8760),
 ) -> dict[str, Any]:
     async with _pool(request).acquire() as conn:
         live_rows = await conn.fetch(
@@ -287,6 +293,9 @@ async def get_user_detail(
             username, interval_hours,
         )
 
+    if current is None and not history:
+        raise HTTPException(status_code=404, detail=f"User '{username}' not found")
+
     return {
         "username": username,
         "current": current,
@@ -310,7 +319,7 @@ async def get_user_detail(
 async def get_org_detail(
     request: Request,
     org_login: str,
-    interval_hours: int = Query(168),
+    interval_hours: int = Query(168, ge=1, le=8760),
 ) -> dict[str, Any]:
     async with _pool(request).acquire() as conn:
         live_rows = await conn.fetch(
@@ -340,6 +349,9 @@ async def get_org_detail(
             """,
             org_login, interval_hours,
         )
+
+    if current is None and not history:
+        raise HTTPException(status_code=404, detail=f"Org '{org_login}' not found")
 
     return {
         "org_login": org_login,
@@ -426,6 +438,14 @@ async def get_cohort(
             snapshot_id,
         )
 
+    if not rows:
+        async with _pool(request).acquire() as conn2:
+            exists = await conn2.fetchval(
+                "SELECT 1 FROM hidden_gem_snapshot_runs WHERE id = $1", snapshot_id
+            )
+        if not exists:
+            raise HTTPException(status_code=404, detail=f"Snapshot {snapshot_id} not found")
+
     total     = len(rows)
     sustained = sum(1 for r in rows if r["classification"] == "true_positive")
     dropped   = sum(1 for r in rows if r["classification"] == "false_positive")
@@ -458,9 +478,9 @@ async def get_cohort(
 async def trigger_snapshot(
     request: Request,
     interval_hours: int = Query(168),
-) -> dict[str, str]:
+) -> dict[str, Any]:
     scheduler = getattr(request.app.state, "snapshot_scheduler", None)
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Scheduler not initialised")
     await scheduler.trigger(interval_hours)
-    return {"status": "triggered", "interval_hours": str(interval_hours)}
+    return {"status": "triggered", "interval_hours": interval_hours}
