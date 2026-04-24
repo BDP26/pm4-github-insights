@@ -139,36 +139,42 @@ async def search(
         rows = await conn.fetch(
             """
             SELECT type, name, score FROM (
-                SELECT DISTINCT ON (full_name)
-                    'repo'    AS type,
-                    full_name AS name,
-                    sig_score AS score
-                FROM hidden_gem_snapshot_repos sr
-                JOIN hidden_gem_snapshot_runs  rn ON rn.id = sr.snapshot_id
-                WHERE sr.full_name ILIKE $1 ESCAPE '\\'
-                ORDER BY full_name, rn.run_at DESC
+                SELECT * FROM (
+                    SELECT DISTINCT ON (full_name)
+                        'repo'    AS type,
+                        full_name AS name,
+                        sig_score AS score
+                    FROM hidden_gem_snapshot_repos sr
+                    JOIN hidden_gem_snapshot_runs  rn ON rn.id = sr.snapshot_id
+                    WHERE sr.full_name ILIKE $1 ESCAPE '\\'
+                    ORDER BY full_name, rn.run_at DESC
+                ) repos
 
                 UNION ALL
 
-                SELECT DISTINCT ON (username)
-                    'user'      AS type,
-                    username    AS name,
-                    total_score AS score
-                FROM hidden_gem_snapshot_users su
-                JOIN hidden_gem_snapshot_runs  rn ON rn.id = su.snapshot_id
-                WHERE su.username ILIKE $1 ESCAPE '\\'
-                ORDER BY username, rn.run_at DESC
+                SELECT * FROM (
+                    SELECT DISTINCT ON (username)
+                        'user'      AS type,
+                        username    AS name,
+                        total_score AS score
+                    FROM hidden_gem_snapshot_users su
+                    JOIN hidden_gem_snapshot_runs  rn ON rn.id = su.snapshot_id
+                    WHERE su.username ILIKE $1 ESCAPE '\\'
+                    ORDER BY username, rn.run_at DESC
+                ) users
 
                 UNION ALL
 
-                SELECT DISTINCT ON (org_login)
-                    'org'                 AS type,
-                    org_login             AS name,
-                    org_repos_total_score AS score
-                FROM hidden_gem_snapshot_orgs so
-                JOIN hidden_gem_snapshot_runs rn ON rn.id = so.snapshot_id
-                WHERE so.org_login ILIKE $1 ESCAPE '\\'
-                ORDER BY org_login, rn.run_at DESC
+                SELECT * FROM (
+                    SELECT DISTINCT ON (org_login)
+                        'org'                 AS type,
+                        org_login             AS name,
+                        org_repos_total_score AS score
+                    FROM hidden_gem_snapshot_orgs so
+                    JOIN hidden_gem_snapshot_runs rn ON rn.id = so.snapshot_id
+                    WHERE so.org_login ILIKE $1 ESCAPE '\\'
+                    ORDER BY org_login, rn.run_at DESC
+                ) orgs
             ) combined
             WHERE ($2 = 'all' OR type = $2)
             ORDER BY score DESC NULLS LAST
