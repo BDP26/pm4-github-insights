@@ -16,6 +16,11 @@ def mock_pool() -> MagicMock:
     conn.fetch = AsyncMock(return_value=[])
     conn.executemany = AsyncMock()
     conn.execute = AsyncMock()
+    # conn.transaction() must return an async context manager (not a coroutine)
+    txn_ctx = MagicMock()
+    txn_ctx.__aenter__ = AsyncMock(return_value=None)
+    txn_ctx.__aexit__ = AsyncMock(return_value=False)
+    conn.transaction = MagicMock(return_value=txn_ctx)
     # pool.acquire() must return an async context manager directly (not a coroutine)
     acquire_ctx = MagicMock()
     acquire_ctx.__aenter__ = AsyncMock(return_value=conn)
@@ -67,3 +72,15 @@ async def test_run_snapshot_updates_counts(
     conn.execute.assert_awaited_once()
     update_sql = conn.execute.call_args[0][0]
     assert "UPDATE hidden_gem_snapshot_runs" in update_sql
+
+
+@pytest.mark.asyncio
+async def test_run_snapshot_reraises_on_db_error(
+    mock_pool: MagicMock, config: SnapshotConfig
+) -> None:
+    conn = mock_pool.acquire.return_value.__aenter__.return_value
+    conn.fetchval.side_effect = Exception("connection reset")
+    with patch("scheduler.snapshot_scheduler.AsyncIOScheduler"):
+        scheduler = SnapshotScheduler(mock_pool, config)
+        with pytest.raises(Exception, match="connection reset"):
+            await scheduler._run_snapshot(24)
