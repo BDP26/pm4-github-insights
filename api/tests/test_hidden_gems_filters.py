@@ -145,3 +145,26 @@ def test_get_topics_cache_hit_skips_db(client):
     test_client.get("/api/hidden-gems/filters/topics")
     test_client.get("/api/hidden-gems/filters/topics")
     assert conn.fetch.call_count == 1
+
+
+# ── Live cache ────────────────────────────────────────────────────────────────
+
+from routers.hidden_gems import _live_cache
+
+
+@pytest.fixture(autouse=True)
+def clear_live_cache():
+    _live_cache.clear()
+    yield
+    _live_cache.clear()
+
+
+def test_live_cache_hit_skips_db(client):
+    """Second identical request must not hit the DB."""
+    test_client, conn = client
+    conn.fetch.return_value = []
+
+    test_client.get("/api/hidden-gems/live?scope=repos&hours=168")
+    test_client.get("/api/hidden-gems/live?scope=repos&hours=168")
+
+    assert conn.fetch.call_count == 1

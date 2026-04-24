@@ -141,6 +141,16 @@ async def get_live(
     if scope not in {"repos", "users", "orgs"}:
         raise HTTPException(status_code=422, detail="scope must be one of: repos, users, orgs")
 
+    cache_key = (
+        scope, hours,
+        tuple(sorted(language)),
+        tuple(sorted(license)),
+        tuple(sorted(topic)),
+        page, limit,
+    )
+    if cache_key in _live_cache:
+        return _live_cache[cache_key]
+
     offset = (page - 1) * limit
     lang_arr  = language or None
     lic_arr   = license  or None
@@ -159,8 +169,10 @@ async def get_live(
                 """,
                 1.0, 1.0, hours, lang_arr, lic_arr, topic_arr, limit, offset,
             )
-            return {"scope": "users", "page": page, "limit": limit,
-                    "items": [dict(r) for r in rows]}
+            result: dict[str, Any] = {"scope": "users", "page": page, "limit": limit,
+                                       "items": [dict(r) for r in rows]}
+            _live_cache[cache_key] = result
+            return result
 
         if scope == "orgs":
             rows = await conn.fetch(
@@ -177,8 +189,10 @@ async def get_live(
                 """,
                 1.0, 1.0, hours, lang_arr, lic_arr, topic_arr, limit, offset,
             )
-            return {"scope": "orgs", "page": page, "limit": limit,
-                    "items": [dict(r) for r in rows]}
+            result = {"scope": "orgs", "page": page, "limit": limit,
+                      "items": [dict(r) for r in rows]}
+            _live_cache[cache_key] = result
+            return result
 
         # default: repos
         rows = await conn.fetch(
@@ -198,11 +212,13 @@ async def get_live(
             """,
             1.0, 1.0, hours, lang_arr, lic_arr, topic_arr, limit, offset,
         )
-        return {"scope": "repos", "page": page, "limit": limit,
-                "items": [
-                    {**dict(r), "topics": list(r["topics"] or [])}
-                    for r in rows
-                ]}
+        result = {"scope": "repos", "page": page, "limit": limit,
+                  "items": [
+                      {**dict(r), "topics": list(r["topics"] or [])}
+                      for r in rows
+                  ]}
+        _live_cache[cache_key] = result
+        return result
 
 
 # ── Global search ─────────────────────────────────────────────────────────────
