@@ -78,6 +78,16 @@ Unchanged — `<LiveEventsTable initialEvents={events} />` remains below the hea
 
 Identical to Hidden Gems: a compact inline button group with three options — **Repos**, **Users**, **Orgs**. Switching scope resets to page 1 and refetches.
 
+### 3b. Instant Page Transitions (UX requirement)
+
+Scope switches and any future filter changes must feel instant — the UI must never block on a network request before updating. Use the same React 19 pattern already in Hidden Gems:
+
+- `useTransition` — wraps the fetch call so the scope button activates immediately while the network request runs in the background
+- `useDeferredValue` — the table renders the previous data at reduced opacity while new data loads, preventing a blank flash
+- A small "Updating…" spinner appears above the table during the pending state (identical to the Hidden Gems loading indicator)
+
+This applies to both the scope toggle and any future limit / sort changes added to this page.
+
 ### 3b. Leaderboard Table
 
 One table, columns adapt per scope. All rows are clickable and navigate to the corresponding Hidden Gems detail page.
