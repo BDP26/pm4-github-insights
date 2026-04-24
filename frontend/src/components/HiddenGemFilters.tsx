@@ -1,6 +1,7 @@
 "use client";
 
 import { Filter, Code, Shield, BookOpen, Info } from "lucide-react";
+import { SearchSelect, SearchSelectItem } from "@tremor/react";
 
 export type Timeframe = "24" | "168" | "730";
 export type Scope = "repos" | "users" | "orgs";
@@ -95,44 +96,47 @@ export default function HiddenGemFilters({
 
           <div className="flex items-center gap-2">
             <Code className="w-4 h-4 text-slate-400" />
-            <select
+            <SearchSelect
               value={language}
-              onChange={(e) => onLanguageChange(e.target.value)}
-              className="pl-2 pr-8 py-1.5 text-sm border border-slate-200 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              onValueChange={onLanguageChange}
+              placeholder="All Languages"
+              className="min-w-[160px]"
             >
-              <option value="">All Languages</option>
+              <SearchSelectItem value="">All Languages</SearchSelectItem>
               {languages.map((l) => (
-                <option key={l} value={l}>{l}</option>
+                <SearchSelectItem key={l} value={l}>{l}</SearchSelectItem>
               ))}
-            </select>
+            </SearchSelect>
           </div>
 
           <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
             <Shield className="w-4 h-4 text-slate-400" />
-            <select
+            <SearchSelect
               value={license}
-              onChange={(e) => onLicenseChange(e.target.value)}
-              className="pl-2 pr-8 py-1.5 text-sm border border-slate-200 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              onValueChange={onLicenseChange}
+              placeholder="All Licenses"
+              className="min-w-[160px]"
             >
-              <option value="">All Licenses</option>
+              <SearchSelectItem value="">All Licenses</SearchSelectItem>
               {licenses.map((l) => (
-                <option key={l} value={l}>{l}</option>
+                <SearchSelectItem key={l} value={l}>{l}</SearchSelectItem>
               ))}
-            </select>
+            </SearchSelect>
           </div>
 
           <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
             <BookOpen className="w-4 h-4 text-slate-400" />
-            <select
+            <SearchSelect
               value={topic}
-              onChange={(e) => onTopicChange(e.target.value)}
-              className="pl-2 pr-8 py-1.5 text-sm border border-slate-200 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+              onValueChange={onTopicChange}
+              placeholder="All Topics"
+              className="min-w-[160px]"
             >
-              <option value="">All Topics</option>
+              <SearchSelectItem value="">All Topics</SearchSelectItem>
               {topics.map((t) => (
-                <option key={t} value={t}>{t}</option>
+                <SearchSelectItem key={t} value={t}>{t}</SearchSelectItem>
               ))}
-            </select>
+            </SearchSelect>
           </div>
 
           <div className="ml-auto text-xs text-slate-500 flex items-center gap-1 bg-slate-100 px-3 py-1.5 rounded-full">
