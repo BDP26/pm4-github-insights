@@ -13,6 +13,7 @@ const navItems: NavItem[] = [
   { label: "Repositories", href: "/repositories" },
   { label: "Contributors", href: "/contributors" },
   { label: "Activity", href: "/activity" },
+  { label: "Hidden Gems", href: "/hidden-gems" },
 ];
 
 export default function Sidebar() {
