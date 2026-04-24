@@ -103,6 +103,7 @@ services:
       - ./db/migrations/004_hidden_gem_functions.sql:/docker-entrypoint-initdb.d/05_migration_004.sql:ro
       - ./db/migrations/005_geocoder_request_logs.sql:/docker-entrypoint-initdb.d/06_migration_005.sql:ro
       - ./db/migrations/006_hidden_gem_aggregations.sql:/docker-entrypoint-initdb.d/07_migration_006.sql:ro
+      - ./db/migrations/007_hidden_gem_snapshots.sql:/docker-entrypoint-initdb.d/08_migration_007.sql:ro
     environment:
       POSTGRES_DB:       github_events
       POSTGRES_USER:     github
@@ -277,6 +278,52 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning
     depends_on:
       timescaledb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── FastAPI (Hidden Gems + KPIs) ──────────────────────────
+  api:
+    build:
+      context: ./api
+      network: host
+    pull_policy: build
+    container_name: github-api
+    networks: [github-stream]
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST:     timescaledb
+      DB_PORT:     "5432"
+      DB_NAME:     github_events
+      DB_USER:     github
+      DB_PASSWORD: github_secret
+      SNAPSHOT_INTERVALS: "24,168,730"
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Next.js Frontend ───────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      network: host
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    pull_policy: build
+    container_name: github-frontend
+    networks: [github-stream]
+    ports:
+      - "3000:3000"
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      api:
         condition: service_healthy
     restart: unless-stopped
 
