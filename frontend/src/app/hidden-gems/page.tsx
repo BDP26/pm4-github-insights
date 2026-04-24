@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useTransition, useDeferredValue } from "react";
 import { Clock } from "lucide-react";
 import HiddenGemFilters, { type Timeframe, type Scope } from "@/components/HiddenGemFilters";
 import HiddenGemTable from "@/components/HiddenGemTable";
@@ -43,7 +43,8 @@ export default function HiddenGemsPage() {
   const [topic, setTopic]         = useState("");
   const [page, setPage]           = useState(1);
   const [items, setItems]         = useState<(HiddenGemRepo | HiddenGemUser | HiddenGemOrg)[]>([]);
-  const [loading, setLoading]     = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const deferredItems = useDeferredValue(items);
 
   // Filter options (loaded once)
   const [languages, setLanguages] = useState<string[]>([]);
@@ -62,22 +63,21 @@ export default function HiddenGemsPage() {
   const [selectedSnapshotId, setSelectedSnapshotId] = useState<number | null>(null);
   const [cohort, setCohort]             = useState<CohortResponse | null>(null);
 
-  // Load filter options once
+  // Reload filter options when timeframe changes
   useEffect(() => {
     Promise.all([
-      get<string[]>("/api/hidden-gems/filters/languages"),
-      get<string[]>("/api/hidden-gems/filters/licenses"),
-      get<string[]>("/api/hidden-gems/filters/topics"),
+      get<string[]>(`/api/hidden-gems/filters/languages${qs({ hours: timeframe })}`),
+      get<string[]>(`/api/hidden-gems/filters/licenses${qs({ hours: timeframe })}`),
+      get<string[]>(`/api/hidden-gems/filters/topics${qs({ hours: timeframe })}`),
     ]).then(([langs, lics, tops]) => {
       setLanguages(langs);
       setLicenses(lics);
       setTopics(tops);
     }).catch(() => {/* filters are optional */});
-  }, []);
+  }, [timeframe]);
 
   // Load live ranking
   const loadLive = useCallback(() => {
-    setLoading(true);
     const params = {
       hours: timeframe,
       scope,
@@ -87,12 +87,16 @@ export default function HiddenGemsPage() {
       ...(license  ? { license: [license] }   : {}),
       ...(topic    ? { topic: [topic] }        : {}),
     };
-    get<{ items: (HiddenGemRepo | HiddenGemUser | HiddenGemOrg)[] }>(
-      `/api/hidden-gems/live${qs(params as Record<string, string | number | string[] | undefined>)}`
-    )
-      .then((d) => setItems(d.items))
-      .catch(() => setItems([]))
-      .finally(() => setLoading(false));
+    startTransition(async () => {
+      try {
+        const d = await get<{ items: (HiddenGemRepo | HiddenGemUser | HiddenGemOrg)[] }>(
+          `/api/hidden-gems/live${qs(params as Record<string, string | number | string[] | undefined>)}`
+        );
+        setItems(d.items);
+      } catch {
+        setItems([]);
+      }
+    });
   }, [timeframe, scope, language, license, topic, page]);
 
   useEffect(() => {
@@ -219,16 +223,14 @@ export default function HiddenGemsPage() {
             onLicenseChange={(l)   => { setLicense(l);   setPage(1); }}
             onTopicChange={(t)     => { setTopic(t);     setPage(1); }}
           />
-          {loading ? (
-            <div className="flex items-center justify-center py-16 text-slate-400">Loading…</div>
-          ) : (
+          <div className={`transition-opacity duration-200 ${isPending ? "opacity-60 pointer-events-none" : ""}`}>
             <HiddenGemTable
-              items={items}
+              items={deferredItems}
               scope={scope}
               page={page}
               onPageChange={setPage}
             />
-          )}
+          </div>
         </>
       ) : (
         <div className="space-y-6">
