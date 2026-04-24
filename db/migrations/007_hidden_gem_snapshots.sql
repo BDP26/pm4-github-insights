@@ -8,7 +8,7 @@
 CREATE TABLE IF NOT EXISTS hidden_gem_snapshot_runs (
     id              SERIAL PRIMARY KEY,
     run_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    interval_hours  INT         NOT NULL,
+    interval_hours  INT         NOT NULL CHECK (interval_hours > 0),
     alpha           FLOAT       NOT NULL DEFAULT 1.0,
     beta            FLOAT       NOT NULL DEFAULT 1.0,
     repo_count      INT,
@@ -79,5 +79,6 @@ BEGIN
     EXECUTE 'GRANT SELECT ON hidden_gem_snapshot_repos TO grafana_reader';
     EXECUTE 'GRANT SELECT ON hidden_gem_snapshot_users TO grafana_reader';
     EXECUTE 'GRANT SELECT ON hidden_gem_snapshot_orgs TO grafana_reader';
+    EXECUTE 'GRANT USAGE ON SEQUENCE hidden_gem_snapshot_runs_id_seq TO grafana_reader';
   END IF;
 END $$;
