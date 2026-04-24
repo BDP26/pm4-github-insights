@@ -7,7 +7,12 @@ import logging
 from typing import Any
 
 import asyncpg
+from cachetools import TTLCache
 from fastapi import APIRouter, HTTPException, Query, Request
+
+# ── Caches ────────────────────────────────────────────────────────────────────
+_filter_cache: TTLCache = TTLCache(maxsize=128, ttl=300)   # 5 minutes
+_live_cache:   TTLCache = TTLCache(maxsize=256, ttl=30)    # 30 seconds
 
 log = logging.getLogger(__name__)
 
@@ -21,24 +26,88 @@ def _pool(request: Request) -> asyncpg.Pool:
 # ── Filter helpers ────────────────────────────────────────────────────────────
 
 @router.get("/filters/languages")
-async def get_languages(request: Request) -> list[str]:
+async def get_languages(
+    request: Request,
+    hours: int = Query(168, ge=1, le=8760),
+    limit: int = Query(50, ge=1, le=500),
+) -> list[str]:
+    cache_key = ("languages", hours, limit)
+    if cache_key in _filter_cache:
+        return _filter_cache[cache_key]
     async with _pool(request).acquire() as conn:
-        rows = await conn.fetch("SELECT value FROM v_repo_languages ORDER BY value")
-    return [r["value"] for r in rows]
+        rows = await conn.fetch(
+            """
+            SELECT r.language AS value
+            FROM events e
+            JOIN repos r ON r.repo_id = e.repo_id
+            WHERE e.time >= NOW() - make_interval(hours => $1::int)
+              AND r.language IS NOT NULL
+            GROUP BY r.language
+            ORDER BY COUNT(*) DESC
+            LIMIT $2
+            """,
+            hours, limit,
+        )
+    result = [r["value"] for r in rows]
+    _filter_cache[cache_key] = result
+    return result
 
 
 @router.get("/filters/licenses")
-async def get_licenses(request: Request) -> list[str]:
+async def get_licenses(
+    request: Request,
+    hours: int = Query(168, ge=1, le=8760),
+    limit: int = Query(20, ge=1, le=500),
+) -> list[str]:
+    cache_key = ("licenses", hours, limit)
+    if cache_key in _filter_cache:
+        return _filter_cache[cache_key]
     async with _pool(request).acquire() as conn:
-        rows = await conn.fetch("SELECT value FROM v_repo_licenses ORDER BY value")
-    return [r["value"] for r in rows]
+        rows = await conn.fetch(
+            """
+            SELECT r.license_spdx AS value
+            FROM events e
+            JOIN repos r ON r.repo_id = e.repo_id
+            WHERE e.time >= NOW() - make_interval(hours => $1::int)
+              AND r.license_spdx IS NOT NULL
+            GROUP BY r.license_spdx
+            ORDER BY COUNT(*) DESC
+            LIMIT $2
+            """,
+            hours, limit,
+        )
+    result = [r["value"] for r in rows]
+    _filter_cache[cache_key] = result
+    return result
 
 
 @router.get("/filters/topics")
-async def get_topics(request: Request) -> list[str]:
+async def get_topics(
+    request: Request,
+    hours: int = Query(168, ge=1, le=8760),
+    limit: int = Query(200, ge=1, le=1000),
+) -> list[str]:
+    cache_key = ("topics", hours, limit)
+    if cache_key in _filter_cache:
+        return _filter_cache[cache_key]
     async with _pool(request).acquire() as conn:
-        rows = await conn.fetch("SELECT value FROM v_repo_topics ORDER BY value")
-    return [r["value"] for r in rows]
+        rows = await conn.fetch(
+            """
+            SELECT t.value
+            FROM events e
+            JOIN repos r ON r.repo_id = e.repo_id
+            JOIN LATERAL unnest(r.topics) AS t(value) ON true
+            WHERE e.time >= NOW() - make_interval(hours => $1::int)
+              AND r.topics IS NOT NULL
+            GROUP BY t.value
+            ORDER BY COUNT(*) DESC
+            LIMIT $2
+            """,
+            hours, limit,
+        )
+    result = [r["value"] for r in rows]
+    _filter_cache[cache_key] = result
+    return result
 
 
 # ── Live ranking ──────────────────────────────────────────────────────────────
