@@ -77,7 +77,7 @@ The db-writer consumes `github.events.status` and `github.ratelimit` topics and 
 
 The API reads `DB_*` variables at runtime.
 
-<!-- AUTO-GENERATED — source: api/main.py DB connection pool config -->
+<!-- AUTO-GENERATED — source: api/main.py, api/scheduler/snapshot_scheduler.py -->
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `DB_HOST` | Yes | `timescaledb` | TimescaleDB hostname. |
@@ -85,6 +85,12 @@ The API reads `DB_*` variables at runtime.
 | `DB_NAME` | Yes | `github_events` | Database name. |
 | `DB_USER` | Yes | `github` | Database user. |
 | `DB_PASSWORD` | Yes | `github_secret` | Database password. |
+| `SNAPSHOT_INTERVALS` | No | `24,168,730` | Comma-separated list of snapshot intervals in hours. One APScheduler job is registered per interval. |
+| `SNAPSHOT_ALPHA` | No | `1.0` | Star weight (α) for the hidden gem scoring function. |
+| `SNAPSHOT_BETA` | No | `1.0` | Fork weight (β) for the hidden gem scoring function. |
+| `SNAPSHOT_MIN_STARS` | No | `5` | Minimum total stars a repo must have to be included in snapshots. |
+| `SNAPSHOT_MIN_FORKS` | No | `1` | Minimum total forks a repo must have to be included in snapshots. |
+| `SNAPSHOT_TOP_N` | No | `1000` | Maximum number of repos captured per snapshot run. |
 <!-- /AUTO-GENERATED -->
 
 ---

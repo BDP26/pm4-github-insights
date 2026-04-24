@@ -33,7 +33,7 @@ docker compose --profile multi-consumer up --build
 
 See [docs/RUNBOOK.md](RUNBOOK.md) for details on multi-instance mode and deployment procedures.
 
-The FastAPI service and Next.js frontend have individual Dockerfiles (`api/` and `frontend/`) and can be added to the compose file or run standalone (see below).
+The FastAPI service (`api/`, port 8000) and Next.js frontend (`frontend/`, port 3000) are included in `docker-compose.yml` and start automatically as part of the full stack. They can also be run standalone (see below).
 
 ---
 
@@ -127,10 +127,11 @@ The integration test uses non-conflicting ports (Kafka: 19094, TimescaleDB: 1543
 ## PR checklist
 
 - [ ] `npm run build` passes with zero errors (frontend)
-- [ ] `docker build -t test-api ./api` succeeds (API)
-- [ ] `docker compose build` succeeds (all services: consumer, producer, geocoder, db-writer)
+- [ ] `docker compose build api frontend` succeeds
+- [ ] `docker compose build` succeeds (all services: consumer, producer, geocoder, db-writer, api, frontend)
 - [ ] `docker compose --profile single-consumer up --build` starts without errors
 - [ ] `python -m pytest tests/ -v` passes (unit tests, 47+ tests, no infrastructure needed)
+- [ ] `python -m pytest api/tests/ -v` passes (scheduler unit tests)
 - [ ] `python -m pytest tests/integration/ -v -s` passes (consumer integration tests, requires Docker)
 - [ ] New environment variables are documented in `docs/ENV.md`
 - [ ] Any new API endpoints are listed in the root `README.md`

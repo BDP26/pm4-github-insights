@@ -42,18 +42,17 @@ kafka (healthy) → kafka-init → timescaledb (healthy) → consumer / consumer
                                                       → geocoder
                                                       → db-writer
                                                       → grafana
+                                                      → api (healthy) → frontend
 ```
 
-The FastAPI (`api/`) and Next.js (`frontend/`) services have their own Dockerfiles and can be started separately:
+The `api` and `frontend` services are part of the standard compose file and start with the rest of the stack. To start them standalone:
 
 ```bash
-# API
-docker build -t github-api ./api
-docker run --name github-api -p 8000:8000 --env-file .env github-api
+# API only
+docker compose up api
 
-# Frontend (set NEXT_PUBLIC_API_URL at build time)
-docker build --build-arg NEXT_PUBLIC_API_URL=http://localhost:8000 -t github-frontend ./frontend
-docker run -p 3000:3000 github-frontend
+# Frontend only (requires API to be reachable)
+docker compose up frontend
 ```
 
 ### Stop and clean up
@@ -111,6 +110,21 @@ Then restart the producer: `docker compose restart producer`
   docker compose --profile multi-consumer up -d
   ```
   Each instance (`consumer-0`, `consumer-1`, `consumer-2`) owns exactly one of the 3 `github.events.raw` partitions.
+
+### Hidden Gems snapshot returns empty data (`repo_count: 0`)
+**Cause:** The DB functions (`hidden_gem_repo_scores`, `hidden_gem_user_scores`, `hidden_gem_org_scores`) exist but return no rows because there is no ingested event data yet.
+**Fix:** This is normal on a fresh stack. Wait for the producer/consumer pipeline to populate the `events` table. Snapshots are captured automatically at each interval (24h, 168h, 730h by default). To force an immediate capture once data exists:
+```bash
+curl -X POST "http://localhost:8000/api/hidden-gems/snapshots/trigger?interval_hours=24"
+```
+
+### API scheduler logs `UndefinedFunctionError` on startup
+**Cause:** Migration 007 (`007_hidden_gem_snapshots.sql`) or the earlier hidden gem functions migration (`004_hidden_gem_functions.sql`) have not been applied.
+**Fix:** The migrations are mounted into the `timescaledb` container's init directory and apply automatically on **first start**. On an existing volume they must be applied manually:
+```bash
+docker cp db/migrations/007_hidden_gem_snapshots.sql $(docker compose ps -q timescaledb):/tmp/007.sql
+docker compose exec timescaledb psql -U github -d github_events -f /tmp/007.sql
+```
 
 ### TimescaleDB compression job fails
 **Cause:** Compression is configured to kick in after 7 days. Chunks younger than 7 days cannot be compressed manually.
