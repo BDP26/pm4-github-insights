@@ -58,6 +58,7 @@ def _snapshot_config_from_env() -> SnapshotConfig:
         min_stars=int(os.getenv("SNAPSHOT_MIN_STARS", "5")),
         min_forks=int(os.getenv("SNAPSHOT_MIN_FORKS", "1")),
         top_n=int(os.getenv("SNAPSHOT_TOP_N", "1000")),
+        query_timeout_s=float(os.getenv("SNAPSHOT_QUERY_TIMEOUT", "300")),
     )
 
 

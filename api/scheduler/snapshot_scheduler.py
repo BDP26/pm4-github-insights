@@ -23,6 +23,7 @@ class SnapshotConfig:
     min_stars: int = 5
     min_forks: int = 1
     top_n: int = 1000
+    query_timeout_s: float = 300.0  # per-query timeout for scoring functions
 
 
 class SnapshotScheduler:
@@ -98,6 +99,7 @@ class SnapshotScheduler:
                         self._config.min_stars,
                         self._config.min_forks,
                         self._config.top_n,
+                        timeout=self._config.query_timeout_s,
                     )
 
                     if repo_rows:
@@ -135,6 +137,7 @@ class SnapshotScheduler:
                         self._config.alpha,
                         self._config.beta,
                         interval_hours,
+                        timeout=self._config.query_timeout_s,
                     )
 
                     if user_rows:
@@ -171,6 +174,7 @@ class SnapshotScheduler:
                         self._config.alpha,
                         self._config.beta,
                         interval_hours,
+                        timeout=self._config.query_timeout_s,
                     )
 
                     if org_rows:

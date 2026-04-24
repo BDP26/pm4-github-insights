@@ -298,6 +298,7 @@ services:
       DB_USER:     github
       DB_PASSWORD: github_secret
       SNAPSHOT_INTERVALS: "24,168,730"
+      SNAPSHOT_QUERY_TIMEOUT: 600
     depends_on:
       timescaledb:
         condition: service_healthy
