@@ -108,12 +108,19 @@ async def get_topics(
         async with _pool(request).acquire() as conn:
             rows = await conn.fetch(
                 """
+                WITH langs AS (
+                    SELECT DISTINCT lower(language) AS lang
+                    FROM repos
+                    WHERE language IS NOT NULL
+                )
                 SELECT t.value
                 FROM events e
                 JOIN repos r ON r.repo_id = e.repo_id
                 JOIN LATERAL unnest(r.topics) AS t(value) ON true
+                LEFT JOIN langs l ON l.lang = lower(t.value)
                 WHERE e.time >= NOW() - make_interval(hours => $1::int)
                   AND r.topics IS NOT NULL
+                  AND l.lang IS NULL
                 GROUP BY t.value
                 ORDER BY COUNT(*) DESC
                 LIMIT $2

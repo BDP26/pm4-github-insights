@@ -6,6 +6,27 @@
 :root {
   --background: #f9fafb;
   --foreground: #111827;
+
+  /* Tremor v3 design tokens — required for Tailwind v4 compatibility */
+  --color-tremor-background: #ffffff;
+  --color-tremor-background-muted: #f9fafb;
+  --color-tremor-background-subtle: #f3f4f6;
+  --color-tremor-background-emphasis: #374151;
+  --color-tremor-border: #e5e7eb;
+  --color-tremor-ring: #e5e7eb;
+  --color-tremor-content-subtle: #9ca3af;
+  --color-tremor-content: #6b7280;
+  --color-tremor-content-emphasis: #374151;
+  --color-tremor-content-strong: #111827;
+  --color-tremor-content-inverted: #ffffff;
+  --color-tremor-brand: #6366f1;
+  --color-tremor-brand-emphasis: #4f46e5;
+  --color-tremor-brand-inverted: #ffffff;
+  --color-tremor-brand-subtle: #a5b4fc;
+  --color-tremor-brand-muted: #e0e7ff;
+  --shadow-tremor-input: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-tremor-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-tremor-dropdown: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 }
 
 body {
