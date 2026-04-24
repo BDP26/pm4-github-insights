@@ -6,7 +6,7 @@ export interface HiddenGemRepo {
   language: string | null;
   license_spdx: string | null;
   topics: string[];
-  sig_score: number;
+  sig_score: number | null;
   count_stars_interval: number;
   count_forks_interval: number;
   total_stars: number;

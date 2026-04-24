@@ -3,11 +3,9 @@
 /* Tell Tailwind v4 to scan Tremor's source files so no utility classes are purged */
 @source "../../node_modules/@tremor/react/dist";
 
-:root {
-  --background: #f9fafb;
-  --foreground: #111827;
-
-  /* Tremor v3 design tokens — required for Tailwind v4 compatibility */
+/* Tremor v3 design tokens registered as Tailwind v4 theme tokens.
+   Using @theme (not :root) so Tailwind generates bg-tremor-*, text-tremor-*, etc. */
+@theme {
   --color-tremor-background: #ffffff;
   --color-tremor-background-muted: #f9fafb;
   --color-tremor-background-subtle: #f3f4f6;
@@ -27,6 +25,11 @@
   --shadow-tremor-input: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-tremor-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
   --shadow-tremor-dropdown: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+:root {
+  --background: #f9fafb;
+  --foreground: #111827;
 }
 
 body {

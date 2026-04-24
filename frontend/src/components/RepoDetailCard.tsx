@@ -6,7 +6,7 @@ interface RepoDetailCardProps {
 }
 
 export default function RepoDetailCard({ repo }: RepoDetailCardProps) {
-  const isSignificant = repo.sig_score >= 3.0;
+  const isSignificant = (repo.sig_score ?? 0) >= 3.0;
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
@@ -38,7 +38,7 @@ export default function RepoDetailCard({ repo }: RepoDetailCardProps) {
 
         <div className={`text-right px-4 py-3 rounded-xl ${isSignificant ? "bg-emerald-50 border border-emerald-200" : "bg-amber-50 border border-amber-200"}`}>
           <p className={`text-3xl font-bold ${isSignificant ? "text-emerald-700" : "text-amber-600"}`}>
-            {repo.sig_score.toFixed(2)}
+            {repo.sig_score != null ? repo.sig_score.toFixed(2) : "—"}
           </p>
           <p className={`text-xs mt-1 ${isSignificant ? "text-emerald-600" : "text-amber-500"}`}>
             {isSignificant ? "≥ 95% Confidence" : "< 95% Confidence"}
