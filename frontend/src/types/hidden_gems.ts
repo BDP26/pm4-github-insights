@@ -15,8 +15,8 @@ export interface HiddenGemRepo {
 
 export interface HiddenGemUser {
   username: string;
-  total_score: number;
-  best_repo_score: number;
+  total_score: number | null;
+  best_repo_score: number | null;
   best_repo: string | null;
   hidden_gem_count: number;
   active_repos_in_window: number;
@@ -24,12 +24,12 @@ export interface HiddenGemUser {
 
 export interface HiddenGemOrg {
   org_login: string;
-  org_repos_total_score: number;
-  org_repos_best_score: number;
+  org_repos_total_score: number | null;
+  org_repos_best_score: number | null;
   org_active_repos: number;
   org_hidden_gem_count: number;
-  member_repos_total_score: number;
-  member_repos_best_score: number;
+  member_repos_total_score: number | null;
+  member_repos_best_score: number | null;
   member_active_repos: number;
   member_active_users: number;
   member_hidden_gem_count: number;

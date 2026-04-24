@@ -100,7 +100,7 @@ export default function HiddenGemFilters({
               value={language}
               onValueChange={onLanguageChange}
               placeholder="All Languages"
-              className="min-w-[160px]"
+              className="min-w-[160px] bg-white"
             >
               <SearchSelectItem value="">All Languages</SearchSelectItem>
               {languages.map((l) => (
@@ -115,7 +115,7 @@ export default function HiddenGemFilters({
               value={license}
               onValueChange={onLicenseChange}
               placeholder="All Licenses"
-              className="min-w-[160px]"
+              className="min-w-[160px] bg-white"
             >
               <SearchSelectItem value="">All Licenses</SearchSelectItem>
               {licenses.map((l) => (
@@ -130,7 +130,7 @@ export default function HiddenGemFilters({
               value={topic}
               onValueChange={onTopicChange}
               placeholder="All Topics"
-              className="min-w-[160px]"
+              className="min-w-[160px] bg-white"
             >
               <SearchSelectItem value="">All Topics</SearchSelectItem>
               {topics.map((t) => (

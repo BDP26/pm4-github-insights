@@ -223,13 +223,24 @@ export default function HiddenGemsPage() {
             onLicenseChange={(l)   => { setLicense(l);   setPage(1); }}
             onTopicChange={(t)     => { setTopic(t);     setPage(1); }}
           />
-          <div className={`transition-opacity duration-200 ${isPending ? "opacity-60 pointer-events-none" : ""}`}>
-            <HiddenGemTable
-              items={deferredItems}
-              scope={scope}
-              page={page}
-              onPageChange={setPage}
-            />
+          <div className="relative">
+            {isPending && (
+              <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-center gap-2 bg-indigo-50 border border-indigo-100 rounded-lg py-2 text-sm font-medium text-indigo-600 shadow-sm">
+                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Updating leaderboard…
+              </div>
+            )}
+            <div className={`transition-opacity duration-200 ${isPending ? "opacity-50 pointer-events-none mt-10" : ""}`}>
+              <HiddenGemTable
+                items={deferredItems}
+                scope={scope}
+                page={page}
+                onPageChange={setPage}
+              />
+            </div>
           </div>
         </>
       ) : (

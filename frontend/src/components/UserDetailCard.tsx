@@ -27,7 +27,9 @@ export default function UserDetailCard({ user, repos }: UserDetailCardProps) {
             )}
           </div>
           <div className="text-right px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-200">
-            <p className="text-3xl font-bold text-emerald-700">{user.total_score.toFixed(2)}</p>
+            <p className="text-3xl font-bold text-emerald-700">
+              {user.total_score != null ? user.total_score.toFixed(2) : "—"}
+            </p>
             <p className="text-xs mt-1 text-emerald-600">Total Score</p>
           </div>
         </div>

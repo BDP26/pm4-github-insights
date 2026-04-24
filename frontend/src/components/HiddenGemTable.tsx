@@ -15,7 +15,12 @@ interface HiddenGemTableProps {
   onPageChange: (p: number) => void;
 }
 
-function ScoreBadge({ score }: { score: number }) {
+function ScoreBadge({ score }: { score: number | null }) {
+  if (score == null) {
+    return (
+      <span className="text-sm text-slate-400">—</span>
+    );
+  }
   const isSignificant = score >= 3.0;
   return (
     <div className="flex flex-col items-start">
