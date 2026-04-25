@@ -2,6 +2,7 @@ import { Title, Text } from "@tremor/react";
 import KpiCard from "@/components/KpiCard";
 import CommitsChart from "@/components/CommitsChart";
 import RepoActivityChart from "@/components/RepoActivityChart";
+import ActivityHeatmap from "@/components/ActivityHeatmap";
 import LiveEventsTable from "@/components/LiveEventsTable";
 import {
   fetchKpis,
@@ -49,6 +50,9 @@ export default async function OverviewPage() {
         <CommitsChart data={commits} />
         <RepoActivityChart data={repos} />
       </div>
+
+      {/* Activity heatmap — client island, fetches on mount */}
+      <ActivityHeatmap />
 
       {/* Live events table — appends new events via SSE */}
       <LiveEventsTable initialEvents={events} />
