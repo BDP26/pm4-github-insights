@@ -30,6 +30,7 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from routers.hidden_gems import router as hidden_gems_router
+from routers.activity import router as activity_router
 from scheduler import SnapshotConfig, SnapshotScheduler
 
 logging.basicConfig(
@@ -110,6 +111,7 @@ app.add_middleware(
 )
 
 app.include_router(hidden_gems_router)
+app.include_router(activity_router)
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
