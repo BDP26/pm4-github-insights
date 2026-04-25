@@ -203,15 +203,14 @@ async def get_kpis() -> dict[str, Any]:
             since_7d,
         )
 
-        # ── Repos tracked
-        repos_tracked: int = await conn.fetchval(
-            "SELECT COUNT(*) FROM repos"
+        # ── Repos tracked + total stars (single round-trip)
+        repos_row = await conn.fetchrow(
+            "SELECT COUNT(*) AS repos_tracked, "
+            "COALESCE(SUM(stargazers_count), 0) AS total_stars "
+            "FROM repos"
         )
-
-        # ── Total stars across all tracked repos
-        total_stars: int = await conn.fetchval(
-            "SELECT COALESCE(SUM(stargazers_count), 0) FROM repos"
-        )
+        repos_tracked: int = repos_row["repos_tracked"]
+        total_stars:   int = repos_row["total_stars"]
 
     def pct_delta(curr: int, prev: int) -> float | None:
         if not prev:

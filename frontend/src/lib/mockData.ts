@@ -26,6 +26,18 @@ export const kpiMetrics: KpiMetric[] = [
     delta: "-0.5 h",
     deltaType: "increase", // shorter is better, but deltaType reflects direction
   },
+  {
+    title: "Repos Tracked",
+    value: "0",
+    delta: "—",
+    deltaType: "unchanged",
+  },
+  {
+    title: "Total Stars",
+    value: "0",
+    delta: "—",
+    deltaType: "unchanged",
+  },
 ];
 
 // ── Commits over time (last 30 days) ───────────────────────────────────────
