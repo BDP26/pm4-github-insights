@@ -17,6 +17,7 @@ export default function ActivityPage() {
   const [items, setItems]   = useState<ActivityItem[]>([]);
   const [isPending, startTransition] = useTransition();
   const deferredItems = useDeferredValue(items);
+  const deferredScope = useDeferredValue(scope);
 
   const load = useCallback((s: ActivityScope) => {
     startTransition(async () => {
@@ -85,7 +86,7 @@ export default function ActivityPage() {
           </div>
         )}
         <div className={`transition-opacity duration-200 ${isPending ? "opacity-50 pointer-events-none mt-10" : ""}`}>
-          <ActivityTable items={deferredItems} scope={scope} />
+          <ActivityTable items={deferredItems} scope={deferredScope} />
         </div>
       </div>
     </div>
