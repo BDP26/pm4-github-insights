@@ -37,8 +37,7 @@ export default function ActivityPage() {
   useEffect(() => { load(scope); }, [scope, load]);
 
   function handleScope(s: ActivityScope) {
-    setScope(s);   // instant — UI switches immediately
-    load(s);
+    setScope(s);   // instant — UI switches immediately; useEffect will call load(s)
   }
 
   return (
