@@ -49,7 +49,10 @@ export default function ActivityHeatmap() {
 
   useEffect(() => {
     fetch(`${API}/api/overview/heatmap?weeks=52`, { cache: "no-store" })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`${r.status}`);
+        return r.json();
+      })
       .then((d: HeatmapPoint[]) => { setData(d); setLoading(false); })
       .catch(() => { setError(true); setLoading(false); });
   }, []);

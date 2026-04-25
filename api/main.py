@@ -129,90 +129,105 @@ async def get_kpis() -> dict[str, Any]:
     since_60d = now - timedelta(days=60)
     since_7d  = now - timedelta(days=7)
 
-    async with pool.acquire() as conn:
-        # ── Total push events (commit proxy) — current & previous 30-day window
-        commits_now: int = await conn.fetchval(
-            """
-            SELECT COALESCE(sum(event_count), 0)
-            FROM   event_stats_5m
-            WHERE  bucket >= $1 AND event_type = 'PushEvent'
-            """,
-            since_30d,
-        )
-        commits_prev: int = await conn.fetchval(
-            """
-            SELECT COALESCE(sum(event_count), 0)
-            FROM   event_stats_5m
-            WHERE  bucket >= $1 AND bucket < $2 AND event_type = 'PushEvent'
-            """,
-            since_60d,
-            since_30d,
-        )
+    # Run all independent query groups in parallel — each gets its own connection
+    # so none blocks the others. The contributors query is on a large table and
+    # may be slow; it gets a shorter timeout with a graceful fallback to 0.
 
-        # ── Open PRs: opened minus closed in last 30 days (approximation)
-        prs_opened: int = await conn.fetchval(
-            """
-            SELECT count(*) FROM events
-            WHERE  time >= $1
-              AND  event_type = 'PullRequestEvent'
-              AND  payload->>'action' = 'opened'
-            """,
-            since_30d,
-        )
-        prs_closed: int = await conn.fetchval(
-            """
-            SELECT count(*) FROM events
-            WHERE  time >= $1
-              AND  event_type = 'PullRequestEvent'
-              AND  payload->>'action' = 'closed'
-            """,
-            since_30d,
-        )
-        open_prs = max(int(prs_opened or 0) - int(prs_closed or 0), 0)
-
-        # ── Active contributors — current & previous 30-day window
-        contributors_now: int = await conn.fetchval(
-            "SELECT count(DISTINCT actor_username) FROM events WHERE time >= $1",
-            since_30d,
-        )
-        contributors_prev: int = await conn.fetchval(
-            "SELECT count(DISTINCT actor_username) FROM events WHERE time >= $1 AND time < $2",
-            since_60d,
-            since_30d,
-        )
-
-        # ── Avg review time (hours) for PRs that were opened and closed in last 7 d
-        avg_review_hours: float | None = await conn.fetchval(
-            """
-            WITH pr_times AS (
-                SELECT
-                    repo_id,
-                    payload->>'number'                                               AS pr_num,
-                    MIN(CASE WHEN payload->>'action' = 'opened' THEN time END)      AS opened_at,
-                    MAX(CASE WHEN payload->>'action' = 'closed' THEN time END)      AS closed_at
-                FROM   events
-                WHERE  event_type = 'PullRequestEvent'
-                  AND  time >= $1
-                GROUP  BY repo_id, payload->>'number'
+    async def _commits() -> tuple[int, int]:
+        async with pool.acquire() as conn:
+            now_ = await conn.fetchval(
+                "SELECT COALESCE(sum(event_count),0) FROM event_stats_5m "
+                "WHERE bucket >= $1 AND event_type = 'PushEvent'",
+                since_30d,
             )
-            SELECT ROUND(
-                AVG(EXTRACT(EPOCH FROM (closed_at - opened_at)) / 3600)::numeric,
-                1
+            prev = await conn.fetchval(
+                "SELECT COALESCE(sum(event_count),0) FROM event_stats_5m "
+                "WHERE bucket >= $1 AND bucket < $2 AND event_type = 'PushEvent'",
+                since_60d, since_30d,
             )
-            FROM pr_times
-            WHERE opened_at IS NOT NULL AND closed_at IS NOT NULL
-            """,
-            since_7d,
-        )
+        return int(now_ or 0), int(prev or 0)
 
-        # ── Repos tracked + total stars (single round-trip)
-        repos_row = await conn.fetchrow(
-            "SELECT COUNT(*) AS repos_tracked, "
-            "COALESCE(SUM(stargazers_count), 0) AS total_stars "
-            "FROM repos"
-        )
-        repos_tracked: int = repos_row["repos_tracked"]
-        total_stars:   int = repos_row["total_stars"]
+    async def _prs() -> tuple[int, int]:
+        async with pool.acquire() as conn:
+            opened = await conn.fetchval(
+                "SELECT count(*) FROM events WHERE time >= $1 "
+                "AND event_type = 'PullRequestEvent' AND payload->>'action' = 'opened'",
+                since_30d,
+            )
+            closed = await conn.fetchval(
+                "SELECT count(*) FROM events WHERE time >= $1 "
+                "AND event_type = 'PullRequestEvent' AND payload->>'action' = 'closed'",
+                since_30d,
+            )
+        return int(opened or 0), int(closed or 0)
+
+    async def _contributors() -> tuple[int, int]:
+        # COUNT(DISTINCT …) on the events hypertable can be slow on large datasets.
+        # Use a 20-second hard cap and return 0/0 rather than crashing the endpoint.
+        try:
+            async with pool.acquire() as conn:
+                now_ = await conn.fetchval(
+                    "SELECT count(DISTINCT actor_username) FROM events WHERE time >= $1",
+                    since_30d,
+                    timeout=20,
+                )
+                prev = await conn.fetchval(
+                    "SELECT count(DISTINCT actor_username) FROM events "
+                    "WHERE time >= $1 AND time < $2",
+                    since_60d, since_30d,
+                    timeout=20,
+                )
+            return int(now_ or 0), int(prev or 0)
+        except Exception:
+            log.warning("Contributors query exceeded timeout — returning 0")
+            return 0, 0
+
+    async def _review_time() -> float | None:
+        async with pool.acquire() as conn:
+            val = await conn.fetchval(
+                """
+                WITH pr_times AS (
+                    SELECT
+                        repo_id,
+                        payload->>'number'                                               AS pr_num,
+                        MIN(CASE WHEN payload->>'action' = 'opened' THEN time END)      AS opened_at,
+                        MAX(CASE WHEN payload->>'action' = 'closed' THEN time END)      AS closed_at
+                    FROM   events
+                    WHERE  event_type = 'PullRequestEvent'
+                      AND  time >= $1
+                    GROUP  BY repo_id, payload->>'number'
+                )
+                SELECT ROUND(
+                    AVG(EXTRACT(EPOCH FROM (closed_at - opened_at)) / 3600)::numeric,
+                    1
+                )
+                FROM pr_times
+                WHERE opened_at IS NOT NULL AND closed_at IS NOT NULL
+                """,
+                since_7d,
+            )
+        return float(val) if val is not None else None
+
+    async def _repos_stats() -> tuple[int, int]:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT COUNT(*) AS repos_tracked, "
+                "COALESCE(SUM(stargazers_count), 0) AS total_stars "
+                "FROM repos"
+            )
+        return int(row["repos_tracked"]), int(row["total_stars"])
+
+    (
+        (commits_now, commits_prev),
+        (prs_opened, prs_closed),
+        (contributors_now, contributors_prev),
+        avg_review_hours,
+        (repos_tracked, total_stars),
+    ) = await asyncio.gather(
+        _commits(), _prs(), _contributors(), _review_time(), _repos_stats()
+    )
+
+    open_prs = max(prs_opened - prs_closed, 0)
 
     def pct_delta(curr: int, prev: int) -> float | None:
         if not prev:
