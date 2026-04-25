@@ -23,6 +23,8 @@ interface KpisResponse {
   openPRs:             KpiRaw;
   activeContributors:  KpiRaw;
   avgReviewHours:      KpiRaw;
+  reposTracked:        KpiRaw;
+  totalStars:          KpiRaw;
 }
 
 // ── Public fetch functions ────────────────────────────────────────────────────
@@ -63,6 +65,18 @@ export async function fetchKpis(): Promise<KpiMetric[]> {
       value:     d.avgReviewHours.value !== null ? `${d.avgReviewHours.value} h` : "N/A",
       delta:     fmtDelta(d.avgReviewHours.delta),
       deltaType: deltaType(d.avgReviewHours.delta),
+    },
+    {
+      title:     "Repos Tracked",
+      value:     (d.reposTracked.value ?? 0).toLocaleString(),
+      delta:     "—",
+      deltaType: "unchanged",
+    },
+    {
+      title:     "Total Stars",
+      value:     (d.totalStars.value ?? 0).toLocaleString(),
+      delta:     "—",
+      deltaType: "unchanged",
     },
   ];
 }

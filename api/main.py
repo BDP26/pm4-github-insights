@@ -203,6 +203,16 @@ async def get_kpis() -> dict[str, Any]:
             since_7d,
         )
 
+        # ── Repos tracked
+        repos_tracked: int = await conn.fetchval(
+            "SELECT COUNT(*) FROM repos"
+        )
+
+        # ── Total stars across all tracked repos
+        total_stars: int = await conn.fetchval(
+            "SELECT COALESCE(SUM(stargazers_count), 0) FROM repos"
+        )
+
     def pct_delta(curr: int, prev: int) -> float | None:
         if not prev:
             return None
@@ -223,6 +233,14 @@ async def get_kpis() -> dict[str, Any]:
         },
         "avgReviewHours": {
             "value": float(avg_review_hours) if avg_review_hours is not None else None,
+            "delta": None,
+        },
+        "reposTracked": {
+            "value": int(repos_tracked),
+            "delta": None,
+        },
+        "totalStars": {
+            "value": int(total_stars),
             "delta": None,
         },
     }
