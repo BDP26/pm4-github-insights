@@ -24,12 +24,20 @@ const EVENT_LABELS: Record<string, string> = {
   ForkEvent:        "Fork",
 };
 
-function intensityClass(count: number): string {
-  if (count === 0)    return "bg-slate-100";
-  if (count < 10)     return "bg-indigo-100";
-  if (count < 50)     return "bg-indigo-300";
-  if (count < 200)    return "bg-indigo-500";
-  return "bg-indigo-700";
+const INTENSITY: Record<string, string> = {
+  none:   "bg-slate-100",
+  low:    "bg-indigo-100",
+  medium: "bg-indigo-300",
+  high:   "bg-indigo-500",
+  max:    "bg-indigo-700",
+};
+
+function intensityKey(count: number): string {
+  if (count === 0)  return "none";
+  if (count < 10)   return "low";
+  if (count < 50)   return "medium";
+  if (count < 200)  return "high";
+  return "max";
 }
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -37,12 +45,13 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export default function ActivityHeatmap() {
   const [data, setData] = useState<HeatmapPoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     fetch(`${API}/api/overview/heatmap?weeks=52`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d: HeatmapPoint[]) => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch(() => { setError(true); setLoading(false); });
   }, []);
 
   // Build a lookup: { "YYYY-MM-DD": { PushEvent: N, ... } }
@@ -60,6 +69,14 @@ export default function ActivityHeatmap() {
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
         <div className="h-4 w-40 bg-slate-200 rounded animate-pulse mb-4" />
         <div className="h-32 bg-slate-100 rounded animate-pulse" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 text-red-500 text-sm">
+        Failed to load heatmap data.
       </div>
     );
   }
@@ -91,7 +108,7 @@ export default function ActivityHeatmap() {
                     <div
                       key={week}
                       title={`${week} · ${EVENT_LABELS[et]}: ${count}`}
-                      className={`w-3 h-3 rounded-sm ${intensityClass(count)}`}
+                      className={`w-3 h-3 rounded-sm ${INTENSITY[intensityKey(count)]}`}
                     />
                   );
                 })}
@@ -103,8 +120,8 @@ export default function ActivityHeatmap() {
       {/* Legend */}
       <div className="flex items-center gap-2 mt-3 text-xs text-slate-500">
         <span>Less</span>
-        {["bg-slate-100", "bg-indigo-100", "bg-indigo-300", "bg-indigo-500", "bg-indigo-700"].map((cls) => (
-          <div key={cls} className={`w-3 h-3 rounded-sm ${cls}`} />
+        {(["none", "low", "medium", "high", "max"] as const).map((key) => (
+          <div key={key} className={`w-3 h-3 rounded-sm ${INTENSITY[key]}`} />
         ))}
         <span>More</span>
       </div>
