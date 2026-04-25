@@ -21,6 +21,18 @@ function fmt(n: number): string {
   return n.toLocaleString();
 }
 
+function isRepoItem(item: ActivityItem): item is ActivityRepoItem {
+  return "repo_id" in item;
+}
+
+function isUserItem(item: ActivityItem): item is ActivityUserItem {
+  return "username" in item;
+}
+
+function isOrgItem(item: ActivityItem): item is ActivityOrgItem {
+  return "org_login" in item;
+}
+
 function ScoreCell({ score }: { score: number }) {
   return (
     <span className="font-bold text-indigo-600 tabular-nums">
@@ -150,21 +162,24 @@ export default function ActivityTable({ items, scope }: ActivityTableProps) {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 font-semibold">
-              {HEADERS[scope].map((h) => (
-                <th key={h} className="p-4">{h}</th>
+              {HEADERS[scope].map((h, i) => (
+                <th key={i} className="p-4">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {items.map((item, idx) => {
               const rank = idx + 1;
-              if (scope === "repos") {
-                return <RepoRow key={(item as ActivityRepoItem).repo_id} item={item as ActivityRepoItem} rank={rank} />;
+              if (isRepoItem(item)) {
+                return <RepoRow key={item.repo_id} item={item} rank={rank} />;
               }
-              if (scope === "users") {
-                return <UserRow key={(item as ActivityUserItem).username} item={item as ActivityUserItem} rank={rank} />;
+              if (isUserItem(item)) {
+                return <UserRow key={item.username} item={item} rank={rank} />;
               }
-              return <OrgRow key={(item as ActivityOrgItem).org_login} item={item as ActivityOrgItem} rank={rank} />;
+              if (isOrgItem(item)) {
+                return <OrgRow key={item.org_login} item={item} rank={rank} />;
+              }
+              return null;
             })}
           </tbody>
         </table>
