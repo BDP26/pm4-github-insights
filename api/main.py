@@ -344,7 +344,9 @@ async def stream_events() -> StreamingResponse:
     assert pool is not None
 
     async def generator() -> AsyncGenerator[str, None]:
-        last_seen: datetime = datetime.now(timezone.utc)
+        # Seed 2 minutes in the past so connecting clients immediately see
+        # any recent events rather than having to wait for the next arrival.
+        last_seen: datetime = datetime.now(timezone.utc) - timedelta(minutes=2)
 
         # Immediate heartbeat so the browser EventSource registers as open
         yield ": heartbeat\n\n"

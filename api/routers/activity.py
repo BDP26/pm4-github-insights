@@ -51,12 +51,12 @@ async def get_heatmap(
             rows = await conn.fetch(
                 """
                 SELECT
-                    time_bucket('1 week', bucket)::date AS date,
+                    time_bucket('1 week', time)::date AS date,
                     event_type,
-                    SUM(event_count)::int               AS count
-                FROM event_stats_5m
-                WHERE bucket >= NOW() - make_interval(weeks => $1::int)
-                  AND event_type = ANY($2::text[])
+                    COUNT(*)::int                     AS count
+                FROM events
+                WHERE time >= NOW() - make_interval(weeks => $1::int)
+                  AND event_type = ANY($2)
                 GROUP BY date, event_type
                 ORDER BY date, event_type
                 """,

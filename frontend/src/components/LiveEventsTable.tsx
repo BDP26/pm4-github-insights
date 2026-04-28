@@ -20,10 +20,13 @@ export default function LiveEventsTable({ initialEvents }: Props) {
   const { data, isConnected } = useSSE<RecentEvent>(SSE_URL);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Prepend incoming SSE events
+  // Prepend incoming SSE events, deduplicating by id
   useEffect(() => {
     if (!data) return;
-    setEvents((prev) => [data, ...prev].slice(0, 20));
+    setEvents((prev) => {
+      if (prev.some((e) => e.id === data.id)) return prev;
+      return [data, ...prev].slice(0, 20);
+    });
   }, [data]);
 
   // Fallback: poll REST endpoint every 30 s when SSE is not connected
