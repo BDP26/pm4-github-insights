@@ -5,6 +5,7 @@ Periodically captures hidden gem scores from the DB and writes them to
 snapshot tables. Designed to be extracted to a standalone container:
 the class has zero FastAPI imports — it only needs an asyncpg.Pool.
 """
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -13,6 +14,16 @@ import asyncpg
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 log = logging.getLogger(__name__)
+
+# Exceptions that indicate a transient connection problem — safe to retry.
+# asyncio.CancelledError is intentionally excluded: it is a BaseException and
+# signals a deliberate scheduler shutdown, not a recoverable DB glitch.
+_TRANSIENT_ERRORS = (
+    asyncpg.exceptions.ConnectionDoesNotExistError,
+    asyncpg.exceptions.InterfaceError,        # "cannot call Transaction.__aexit__()"
+    asyncpg.exceptions.TooManyConnectionsError,
+    OSError,                                  # network-level drops
+)
 
 
 @dataclass(frozen=True)
@@ -58,6 +69,32 @@ class SnapshotScheduler:
     async def trigger(self, interval_hours: int) -> None:
         """Manually trigger a snapshot for a given interval (e.g. from an API endpoint)."""
         await self._run_snapshot(interval_hours)
+
+    async def _run_with_retry(self, interval_hours: int) -> None:
+        """Call _run_snapshot with linearly increasing timeouts, retrying on transient errors."""
+        base = self._config.query_timeout_s
+        total_attempts = self._config.max_retries + 1
+        for attempt in range(total_attempts):
+            timeout = base * (attempt + 1)
+            try:
+                await self._run_snapshot(interval_hours, query_timeout_s=timeout)
+                return  # success — exit the retry loop
+            except _TRANSIENT_ERRORS as exc:
+                if attempt >= self._config.max_retries:
+                    log.error(
+                        "Snapshot FAILED after %d attempts (interval=%sh): %r",
+                        total_attempts, interval_hours, exc,
+                    )
+                    raise
+                next_timeout = base * (attempt + 2)
+                log.warning(
+                    "Snapshot attempt %d/%d failed (interval=%sh): %r — "
+                    "retrying in %.0fs with timeout=%.0fs",
+                    attempt + 1, total_attempts,
+                    interval_hours, exc,
+                    self._config.retry_delay_s, next_timeout,
+                )
+                await asyncio.sleep(self._config.retry_delay_s)
 
     async def _run_snapshot(self, interval_hours: int, query_timeout_s: float | None = None) -> None:
         """Core snapshot logic: call DB scoring functions and persist results."""

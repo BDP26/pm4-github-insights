@@ -1,3 +1,4 @@
+import asyncpg
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from scheduler import SnapshotConfig, SnapshotScheduler
@@ -112,3 +113,93 @@ async def test_run_snapshot_uses_provided_timeout(mock_pool: MagicMock) -> None:
         assert call.kwargs.get("timeout") == 600.0, (
             f"Expected timeout=600.0 but got {call.kwargs.get('timeout')}"
         )
+
+
+@pytest.mark.asyncio
+async def test_retry_succeeds_after_transient_failure(mock_pool: MagicMock) -> None:
+    """_run_with_retry retries after a transient error and eventually succeeds."""
+    cfg = SnapshotConfig(max_retries=10, retry_delay_s=0.0, query_timeout_s=100.0)
+    with patch("scheduler.snapshot_scheduler.AsyncIOScheduler"):
+        scheduler = SnapshotScheduler(mock_pool, cfg)
+
+    call_count = 0
+    timeouts_seen: list[float] = []
+
+    async def fake_run_snapshot(interval_hours: int, query_timeout_s: float | None = None) -> None:
+        nonlocal call_count
+        call_count += 1
+        timeouts_seen.append(query_timeout_s)
+        if call_count == 1:
+            raise asyncpg.exceptions.ConnectionDoesNotExistError()
+
+    with patch.object(scheduler, "_run_snapshot", side_effect=fake_run_snapshot):
+        await scheduler._run_with_retry(24)
+
+    assert call_count == 2
+    assert timeouts_seen[0] == 100.0   # attempt 1: base × 1
+    assert timeouts_seen[1] == 200.0   # attempt 2: base × 2
+
+
+@pytest.mark.asyncio
+async def test_retry_exhausted_raises(mock_pool: MagicMock) -> None:
+    """_run_with_retry raises after max_retries + 1 total attempts."""
+    cfg = SnapshotConfig(max_retries=3, retry_delay_s=0.0, query_timeout_s=100.0)
+    with patch("scheduler.snapshot_scheduler.AsyncIOScheduler"):
+        scheduler = SnapshotScheduler(mock_pool, cfg)
+
+    call_count = 0
+
+    async def always_fails(interval_hours: int, query_timeout_s: float | None = None) -> None:
+        nonlocal call_count
+        call_count += 1
+        raise asyncpg.exceptions.ConnectionDoesNotExistError()
+
+    with patch.object(scheduler, "_run_snapshot", side_effect=always_fails):
+        with pytest.raises(asyncpg.exceptions.ConnectionDoesNotExistError):
+            await scheduler._run_with_retry(24)
+
+    assert call_count == 4  # 1 initial + 3 retries
+
+
+@pytest.mark.asyncio
+async def test_non_transient_error_raises_immediately(mock_pool: MagicMock) -> None:
+    """A non-transient exception is not retried — it surfaces on the first attempt."""
+    cfg = SnapshotConfig(max_retries=10, retry_delay_s=0.0)
+    with patch("scheduler.snapshot_scheduler.AsyncIOScheduler"):
+        scheduler = SnapshotScheduler(mock_pool, cfg)
+
+    call_count = 0
+
+    async def raises_value_error(interval_hours: int, query_timeout_s: float | None = None) -> None:
+        nonlocal call_count
+        call_count += 1
+        raise ValueError("not a transient error")
+
+    with patch.object(scheduler, "_run_snapshot", side_effect=raises_value_error):
+        with pytest.raises(ValueError, match="not a transient error"):
+            await scheduler._run_with_retry(24)
+
+    assert call_count == 1  # no retries
+
+
+@pytest.mark.asyncio
+async def test_timeout_multiplier(mock_pool: MagicMock) -> None:
+    """Timeout passed to _run_snapshot must be query_timeout_s × (attempt_number)."""
+    cfg = SnapshotConfig(max_retries=10, retry_delay_s=0.0, query_timeout_s=50.0)
+    with patch("scheduler.snapshot_scheduler.AsyncIOScheduler"):
+        scheduler = SnapshotScheduler(mock_pool, cfg)
+
+    timeouts_seen: list[float] = []
+    call_count = 0
+
+    async def capture_and_fail(interval_hours: int, query_timeout_s: float | None = None) -> None:
+        nonlocal call_count
+        call_count += 1
+        timeouts_seen.append(query_timeout_s)
+        if call_count < 4:
+            raise asyncpg.exceptions.ConnectionDoesNotExistError()
+
+    with patch.object(scheduler, "_run_snapshot", side_effect=capture_and_fail):
+        await scheduler._run_with_retry(24)
+
+    assert timeouts_seen == [50.0, 100.0, 150.0, 200.0]
