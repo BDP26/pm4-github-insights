@@ -259,10 +259,10 @@ async def get_commits_over_time(
         rows = await conn.fetch(
             """
             SELECT
-                time_bucket('1 day', bucket)::date AS day,
-                sum(event_count)                   AS commits
-            FROM   event_stats_5m
-            WHERE  bucket >= $1
+                time_bucket('1 day', time)::date AS day,
+                COUNT(*)                          AS commits
+            FROM   events
+            WHERE  time >= $1
               AND  event_type = 'PushEvent'
             GROUP  BY day
             ORDER  BY day
