@@ -162,25 +162,11 @@ async def get_kpis() -> dict[str, Any]:
         return int(opened or 0), int(closed or 0)
 
     async def _contributors() -> tuple[int, int]:
-        # COUNT(DISTINCT …) on the events hypertable can be slow on large datasets.
-        # Use a 20-second hard cap and return 0/0 rather than crashing the endpoint.
-        try:
-            async with pool.acquire() as conn:
-                now_ = await conn.fetchval(
-                    "SELECT count(DISTINCT actor_username) FROM events WHERE time >= $1",
-                    since_30d,
-                    timeout=20,
-                )
-                prev = await conn.fetchval(
-                    "SELECT count(DISTINCT actor_username) FROM events "
-                    "WHERE time >= $1 AND time < $2",
-                    since_60d, since_30d,
-                    timeout=20,
-                )
-            return int(now_ or 0), int(prev or 0)
-        except Exception:
-            log.warning("Contributors query exceeded timeout — returning 0")
-            return 0, 0
+        async with pool.acquire() as conn:
+            count = await conn.fetchval(
+                "SELECT COUNT(*) FROM users WHERE is_bot = FALSE",
+            )
+        return int(count or 0), 0
 
     async def _review_time() -> float | None:
         async with pool.acquire() as conn:
