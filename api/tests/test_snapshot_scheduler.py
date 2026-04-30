@@ -206,6 +206,17 @@ async def test_timeout_multiplier(mock_pool: MagicMock) -> None:
 
 
 @pytest.mark.asyncio
+async def test_trigger_uses_run_with_retry(mock_pool: MagicMock, config: SnapshotConfig) -> None:
+    """trigger() must use _run_with_retry so manual triggers get the same resilience."""
+    with patch("scheduler.snapshot_scheduler.AsyncIOScheduler"):
+        scheduler = SnapshotScheduler(mock_pool, config)
+
+    with patch.object(scheduler, "_run_with_retry", new_callable=AsyncMock) as mock_retry:
+        await scheduler.trigger(24)
+        mock_retry.assert_awaited_once_with(24)
+
+
+@pytest.mark.asyncio
 async def test_start_registers_run_with_retry(mock_pool: MagicMock, config: SnapshotConfig) -> None:
     """APScheduler jobs must be registered with _run_with_retry, not _run_snapshot."""
     with patch("scheduler.snapshot_scheduler.AsyncIOScheduler") as MockScheduler:
