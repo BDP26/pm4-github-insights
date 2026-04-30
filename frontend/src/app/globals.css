@@ -3,6 +3,11 @@
 /* Tell Tailwind v4 to scan Tremor's source files so no utility classes are purged */
 @source "../../node_modules/@tremor/react/dist";
 
+/* Force-generate stroke utilities for colours Tremor builds dynamically at runtime.
+   Without this, Tailwind v4's static analysis misses the assembled class names
+   (e.g. "stroke-" + color + "-500") and SVG chart lines are invisible. */
+@source inline("stroke-{indigo,blue,emerald,rose,amber,violet,slate,orange,pink,teal}-{100,200,300,400,500,600,700,800,900}");
+
 /* Tremor v3 design tokens registered as Tailwind v4 theme tokens.
    Using @theme (not :root) so Tailwind generates bg-tremor-*, text-tremor-*, etc. */
 @theme {
