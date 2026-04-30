@@ -130,8 +130,7 @@ async def get_kpis() -> dict[str, Any]:
     since_7d  = now - timedelta(days=7)
 
     # Run all independent query groups in parallel — each gets its own connection
-    # so none blocks the others. The contributors query is on a large table and
-    # may be slow; it gets a shorter timeout with a graceful fallback to 0.
+    # so none blocks the others.
 
     async def _commits() -> tuple[int, int]:
         async with pool.acquire() as conn:
