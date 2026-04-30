@@ -59,9 +59,10 @@ class SnapshotScheduler:
         """Manually trigger a snapshot for a given interval (e.g. from an API endpoint)."""
         await self._run_snapshot(interval_hours)
 
-    async def _run_snapshot(self, interval_hours: int) -> None:
+    async def _run_snapshot(self, interval_hours: int, query_timeout_s: float | None = None) -> None:
         """Core snapshot logic: call DB scoring functions and persist results."""
-        log.info("Starting snapshot: interval=%sh", interval_hours)
+        effective_timeout = query_timeout_s if query_timeout_s is not None else self._config.query_timeout_s
+        log.info("Starting snapshot: interval=%sh timeout=%.0fs", interval_hours, effective_timeout)
         run_id: int | None = None
         try:
             async with self._pool.acquire() as conn:
@@ -101,7 +102,7 @@ class SnapshotScheduler:
                         self._config.min_stars,
                         self._config.min_forks,
                         self._config.top_n,
-                        timeout=self._config.query_timeout_s,
+                        timeout=effective_timeout,
                     )
 
                     if repo_rows:
@@ -139,7 +140,7 @@ class SnapshotScheduler:
                         self._config.alpha,
                         self._config.beta,
                         interval_hours,
-                        timeout=self._config.query_timeout_s,
+                        timeout=effective_timeout,
                     )
 
                     if user_rows:
@@ -176,7 +177,7 @@ class SnapshotScheduler:
                         self._config.alpha,
                         self._config.beta,
                         interval_hours,
-                        timeout=self._config.query_timeout_s,
+                        timeout=effective_timeout,
                     )
 
                     if org_rows:

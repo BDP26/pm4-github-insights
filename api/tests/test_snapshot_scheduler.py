@@ -96,3 +96,19 @@ def test_snapshot_config_retry_custom() -> None:
     cfg = SnapshotConfig(max_retries=3, retry_delay_s=2.0)
     assert cfg.max_retries == 3
     assert cfg.retry_delay_s == 2.0
+
+
+@pytest.mark.asyncio
+async def test_run_snapshot_uses_provided_timeout(mock_pool: MagicMock) -> None:
+    """_run_snapshot must pass the explicit query_timeout_s to every conn.fetch call."""
+    cfg = SnapshotConfig(query_timeout_s=300.0)
+    with patch("scheduler.snapshot_scheduler.AsyncIOScheduler"):
+        scheduler = SnapshotScheduler(mock_pool, cfg)
+        await scheduler._run_snapshot(24, query_timeout_s=600.0)
+
+    conn = mock_pool.acquire.return_value.__aenter__.return_value
+    # All three fetch calls (repo, user, org scoring) must use timeout=600.0
+    for call in conn.fetch.call_args_list:
+        assert call.kwargs.get("timeout") == 600.0, (
+            f"Expected timeout=600.0 but got {call.kwargs.get('timeout')}"
+        )
