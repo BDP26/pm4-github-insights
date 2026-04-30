@@ -56,7 +56,7 @@ async def get_heatmap(
                     COUNT(*)::int                     AS count
                 FROM events
                 WHERE time >= NOW() - make_interval(weeks => $1::int)
-                  AND event_type = ANY($2)
+                  AND event_type = ANY($2::text[])
                 GROUP BY date, event_type
                 ORDER BY date, event_type
                 """,
