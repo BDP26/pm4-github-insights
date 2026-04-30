@@ -55,7 +55,7 @@ export async function fetchKpis(): Promise<KpiMetric[]> {
       deltaType: deltaType(d.openPRs.delta),
     },
     {
-      title:     "Active Contributors",
+      title:     "Known Contributors",
       value:     (d.activeContributors.value ?? 0).toLocaleString(),
       delta:     fmtDelta(d.activeContributors.delta),
       deltaType: deltaType(d.activeContributors.delta),
