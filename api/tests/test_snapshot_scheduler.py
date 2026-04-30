@@ -84,3 +84,15 @@ async def test_run_snapshot_reraises_on_db_error(
         scheduler = SnapshotScheduler(mock_pool, config)
         with pytest.raises(Exception, match="connection reset"):
             await scheduler._run_snapshot(24)
+
+
+def test_snapshot_config_retry_defaults() -> None:
+    cfg = SnapshotConfig()
+    assert cfg.max_retries == 10
+    assert cfg.retry_delay_s == 5.0
+
+
+def test_snapshot_config_retry_custom() -> None:
+    cfg = SnapshotConfig(max_retries=3, retry_delay_s=2.0)
+    assert cfg.max_retries == 3
+    assert cfg.retry_delay_s == 2.0

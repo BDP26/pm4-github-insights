@@ -23,7 +23,9 @@ class SnapshotConfig:
     min_stars: int = 5
     min_forks: int = 1
     top_n: int = 1000
-    query_timeout_s: float = 300.0  # per-query timeout for scoring functions
+    query_timeout_s: float = 300.0  # per-query base timeout; multiplied by attempt number on retry
+    max_retries: int = 10           # maximum retry attempts after first failure
+    retry_delay_s: float = 5.0     # flat sleep between attempts (seconds)
 
 
 class SnapshotScheduler:
