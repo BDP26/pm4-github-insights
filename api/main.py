@@ -136,13 +136,13 @@ async def get_kpis() -> dict[str, Any]:
     async def _commits() -> tuple[int, int]:
         async with pool.acquire() as conn:
             now_ = await conn.fetchval(
-                "SELECT COALESCE(sum(event_count),0) FROM event_stats_5m "
-                "WHERE bucket >= $1 AND event_type = 'PushEvent'",
+                "SELECT COUNT(*) FROM events "
+                "WHERE time >= $1 AND event_type = 'PushEvent'",
                 since_30d,
             )
             prev = await conn.fetchval(
-                "SELECT COALESCE(sum(event_count),0) FROM event_stats_5m "
-                "WHERE bucket >= $1 AND bucket < $2 AND event_type = 'PushEvent'",
+                "SELECT COUNT(*) FROM events "
+                "WHERE time >= $1 AND time < $2 AND event_type = 'PushEvent'",
                 since_60d, since_30d,
             )
         return int(now_ or 0), int(prev or 0)
