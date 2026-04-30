@@ -203,3 +203,22 @@ async def test_timeout_multiplier(mock_pool: MagicMock) -> None:
         await scheduler._run_with_retry(24)
 
     assert timeouts_seen == [50.0, 100.0, 150.0, 200.0]
+
+
+@pytest.mark.asyncio
+async def test_start_registers_run_with_retry(mock_pool: MagicMock, config: SnapshotConfig) -> None:
+    """APScheduler jobs must be registered with _run_with_retry, not _run_snapshot."""
+    with patch("scheduler.snapshot_scheduler.AsyncIOScheduler") as MockScheduler:
+        mock_sched = MockScheduler.return_value
+        mock_sched.add_job = MagicMock()
+        mock_sched.start = MagicMock()
+
+        scheduler = SnapshotScheduler(mock_pool, config)
+        await scheduler.start()
+
+        assert mock_sched.add_job.call_count == len(config.interval_hours)
+        for call in mock_sched.add_job.call_args_list:
+            registered_fn = call.args[0]
+            assert registered_fn == scheduler._run_with_retry, (
+                f"Expected _run_with_retry but got {registered_fn.__name__}"
+            )

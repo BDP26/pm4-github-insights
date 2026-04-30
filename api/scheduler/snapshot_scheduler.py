@@ -49,7 +49,7 @@ class SnapshotScheduler:
         """Register one APScheduler job per interval and start the scheduler."""
         for hours in self._config.interval_hours:
             self._scheduler.add_job(
-                self._run_snapshot,
+                self._run_with_retry,
                 "interval",
                 hours=hours,
                 args=[hours],
