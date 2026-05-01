@@ -14,15 +14,6 @@ const INTERVAL_FRAMES: { label: string; hours: number }[] = [
   { label: "1 month", hours: 720 },
 ];
 
-function createFakeHeatmapData(): GeoHeatmapPoint[] {
-  return Array.from({ length: 900 }, () => ({
-    lat: (Math.random() - 0.5) * 160,
-    lng: (Math.random() - 0.5) * 360,
-    country: "Fake data",
-    count: 1 + Math.round(Math.random() * 100),
-  }));
-}
-
 function checkWebGL(): boolean {
   try {
     const canvas = document.createElement("canvas");
@@ -37,8 +28,6 @@ export default function ActivityGlobe() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [hours, setHours]               = useState<Hours>(null);
   const [data, setData]                 = useState<GeoHeatmapPoint[]>([]);
-  const [showFakeData, setShowFakeData] = useState(false);
-  const [fakeData] = useState<GeoHeatmapPoint[]>(() => createFakeHeatmapData());
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState(false);
   const [size, setSize]                 = useState({ width: 0, height: 0 });
@@ -70,11 +59,9 @@ export default function ActivityGlobe() {
   useEffect(() => {
     if (!globeRef.current) return;
     globeRef.current.pointOfView({ lat: 18, lng: 10, altitude: 2.2 }, 1200);
-  }, [data.length, showFakeData]);
+  }, [data.length]);
 
-  const visibleData = showFakeData ? fakeData : data;
-
-  const heatmapLayer = [visibleData];
+  const heatmapLayer = [data];
 
   const heatmapConfig = {
     heatmapPointLat:    "lat",
@@ -126,17 +113,6 @@ export default function ActivityGlobe() {
           >
             All time
           </button>
-          <button
-            type="button"
-            onClick={() => setShowFakeData(!showFakeData)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-              showFakeData
-                ? "bg-amber-50 text-amber-700 border-amber-200"
-                : "bg-slate-50 text-slate-500 border-slate-200 hover:text-slate-700"
-            }`}
-          >
-            {showFakeData ? "Fake data on" : "Show fake data"}
-          </button>
           <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 ml-1">
             <span className="inline-flex h-2 w-2 rounded-full bg-orange-400/80" />
             heat layer
@@ -173,13 +149,13 @@ export default function ActivityGlobe() {
               ref={globeRef}
               width={size.width || 800}
               height={size.height || 420}
-              globeImageUrl="//cdn.jsdelivr.net/npm/three-globe/example/img/earth-night.jpg"
+              globeImageUrl="//cdn.jsdelivr.net/npm/three-globe/example/img/earth-blue-marble.jpg"
               bumpImageUrl="//cdn.jsdelivr.net/npm/three-globe/example/img/earth-topology.png"
-              backgroundColor="rgba(255,255,255,0)"
+              backgroundColor="#f8fbff"
               animateIn={false}
               showAtmosphere={true}
-              atmosphereColor="#7dd3fc"
-              atmosphereAltitude={0.14}
+              atmosphereColor="#93c5fd"
+              atmosphereAltitude={0.12}
               heatmapsData={heatmapLayer}
               {...heatmapConfig}
               enablePointerInteraction={false}
@@ -190,9 +166,7 @@ export default function ActivityGlobe() {
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-4 text-xs text-slate-500">
-        <span>
-          {visibleData.length.toLocaleString()} {showFakeData ? "fake" : "aggregated"} geo locations
-        </span>
+        <span>{data.length.toLocaleString()} aggregated geo locations</span>
         <span>heatmap layer only, no discrete markers</span>
       </div>
     </section>
