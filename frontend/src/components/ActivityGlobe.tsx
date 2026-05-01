@@ -6,6 +6,23 @@ import { fetchGeoHeatmap, type GeoHeatmapPoint } from "@/lib/api";
 
 const Globe = GlobeBase as unknown as ComponentType<any>;
 
+function heatmapColorFn(t: number): string {
+  // t: 0 (cold) → 1 (hot)
+  const stops: [number, number, number, number][] = [
+    [254, 249, 195, 0.0],
+    [251, 191,  36, 0.65],
+    [249, 115,  22, 0.85],
+    [220,  38,  38, 0.95],
+    [127,  29,  29, 1.0],
+  ];
+  const n = stops.length - 1;
+  const i = Math.min(n - 1, Math.floor(t * n));
+  const f = t * n - i;
+  const [r1, g1, b1, a1] = stops[i];
+  const [r2, g2, b2, a2] = stops[i + 1];
+  return `rgba(${Math.round(r1 + f*(r2-r1))},${Math.round(g1 + f*(g2-g1))},${Math.round(b1 + f*(b2-b1))},${(a1 + f*(a2-a1)).toFixed(2)})`;
+}
+
 const TIMEFRAMES = [
   { label: "24h",    hours: 24  },
   { label: "1 week", hours: 168 },
@@ -149,13 +166,9 @@ export default function ActivityGlobe() {
               heatmapPointLat="lat"
               heatmapPointLng="lng"
               heatmapPointWeight="count"
-              heatmapBandwidth={1.4}
-              heatmapColor={["#fef9c3", "#fde047", "#f97316", "#dc2626", "#7f1d1d"]}
-              heatmapIntensity={0.9}
-              heatmapOpacity={0.85}
-              heatmapTopResolution={256}
-              heatmapAltitude={0.01}
-              heatmapMargin={0.1}
+              heatmapBandwidth={3}
+              heatmapColorFn={heatmapColorFn}
+              heatmapTopAltitude={0.05}
               enablePointerInteraction={false}
               showGraticules={false}
             />
