@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import GlobeBase from "react-globe.gl";
 import { fetchGeoHeatmap, type GeoHeatmapPoint } from "@/lib/api";
+import { fetchGlobeCityLabels, type GlobeCityLabel } from "@/lib/globeCities";
 
 const Globe = GlobeBase as unknown as ComponentType<any>;
 
@@ -28,8 +29,13 @@ export default function ActivityGlobe() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [hours, setHours]               = useState<Hours>(null);
   const [data, setData]                 = useState<GeoHeatmapPoint[]>([]);
+  const [cityLabels, setCityLabels]     = useState<GlobeCityLabel[]>([]);
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState(false);
+  const [cityLoading, setCityLoading]   = useState(false);
+  const [cityError, setCityError]       = useState(false);
+  const [showCapitals, setShowCapitals] = useState(false);
+  const [showMajorCities, setShowMajorCities] = useState(false);
   const [size, setSize]                 = useState({ width: 0, height: 0 });
   const [webglAvailable, setWebglAvailable] = useState<boolean | null>(null);
 
@@ -61,7 +67,39 @@ export default function ActivityGlobe() {
     globeRef.current.pointOfView({ lat: 18, lng: 10, altitude: 2.2 }, 1200);
   }, [data.length]);
 
+  useEffect(() => {
+    if (!showCapitals && !showMajorCities) return;
+    if (cityLabels.length > 0 || cityLoading) return;
+
+    let active = true;
+
+    setCityLoading(true);
+    setCityError(false);
+
+    fetchGlobeCityLabels()
+      .then((labels) => {
+        if (!active) return;
+        setCityLabels(labels);
+        setCityLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setCityError(true);
+        setCityLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [cityLabels.length, cityLoading, showCapitals, showMajorCities]);
+
   const heatmapLayer = [data];
+
+  const cityOverlay = cityLabels.filter((label: GlobeCityLabel) => {
+    const matchesCapitals = showCapitals && label.categories.includes("capital");
+    const matchesMajorCities = showMajorCities && label.categories.includes("major");
+    return matchesCapitals || matchesMajorCities;
+  });
 
   const heatmapConfig = {
     heatmapPointLat:    "lat",
@@ -101,6 +139,30 @@ export default function ActivityGlobe() {
               </button>
             ))}
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowCapitals((value: boolean) => !value)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                showCapitals
+                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                  : "bg-slate-50 text-slate-500 border-slate-200 hover:text-slate-700"
+              }`}
+            >
+              Hauptstädte
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowMajorCities((value: boolean) => !value)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                showMajorCities
+                  ? "bg-sky-50 text-sky-700 border-sky-200"
+                  : "bg-slate-50 text-slate-500 border-slate-200 hover:text-slate-700"
+              }`}
+            >
+              Großstädte
+            </button>
+          </div>
           {/* dedicated all-time button */}
           <button
             type="button"
@@ -138,6 +200,18 @@ export default function ActivityGlobe() {
           </div>
         )}
 
+        {cityError && (showCapitals || showMajorCities) && !error && (
+          <div className="absolute left-4 top-4 z-10 rounded-lg border border-amber-200 bg-white/90 px-3 py-2 text-xs text-amber-700 shadow-sm">
+            City labels could not be loaded.
+          </div>
+        )}
+
+        {cityLoading && (showCapitals || showMajorCities) && (
+          <div className="absolute left-4 top-4 z-10 rounded-lg border border-sky-200 bg-white/90 px-3 py-2 text-xs text-sky-700 shadow-sm">
+            Loading city labels...
+          </div>
+        )}
+
         <div className="relative h-full w-full">
           {webglAvailable === false && (
             <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-slate-500">
@@ -157,6 +231,14 @@ export default function ActivityGlobe() {
               atmosphereColor="#93c5fd"
               atmosphereAltitude={0.12}
               heatmapsData={heatmapLayer}
+              labelsData={cityOverlay}
+              labelLat={(d: GlobeCityLabel) => d.lat}
+              labelLng={(d: GlobeCityLabel) => d.lng}
+              labelText={(d: GlobeCityLabel) => d.text}
+              labelSize={(d: GlobeCityLabel) => d.size}
+              labelDotRadius={(d: GlobeCityLabel) => d.dotRadius}
+              labelColor={(d: GlobeCityLabel) => d.color}
+              labelResolution={2}
               {...heatmapConfig}
               enablePointerInteraction={false}
               showGraticules={false}
@@ -167,7 +249,11 @@ export default function ActivityGlobe() {
 
       <div className="mt-3 flex items-center justify-between gap-4 text-xs text-slate-500">
         <span>{data.length.toLocaleString()} aggregated geo locations</span>
-        <span>heatmap layer only, no discrete markers</span>
+        <span>
+          {showCapitals || showMajorCities
+            ? `${cityOverlay.length.toLocaleString()} city labels shown`
+            : "heatmap layer only, no discrete markers"}
+        </span>
       </div>
     </section>
   );
