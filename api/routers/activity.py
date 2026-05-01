@@ -2,8 +2,10 @@
 Activity Router
 ───────────────
 GET /api/overview/heatmap?weeks=52
+GET /api/overview/globe-heatmap?weeks=52&limit=250
 GET /api/activity/leaderboard?scope=repos|users|orgs&limit=20
 """
+
 import asyncio
 from typing import Any, Literal
 
@@ -11,11 +13,13 @@ import asyncpg
 from cachetools import TTLCache
 from fastapi import APIRouter, Query, Request
 
-_heatmap_cache:     TTLCache = TTLCache(maxsize=32,  ttl=300)   # 5 min
-_leaderboard_cache: TTLCache = TTLCache(maxsize=64,  ttl=60)    # 60 s
+_heatmap_cache: TTLCache = TTLCache(maxsize=32, ttl=300)  # 5 min
+_globe_heatmap_cache: TTLCache = TTLCache(maxsize=32, ttl=300)  # 5 min
+_leaderboard_cache: TTLCache = TTLCache(maxsize=64, ttl=60)  # 60 s
 
 # ── Cache stampede locks (double-checked locking) ──────────────────────────────
-_heatmap_lock:     asyncio.Lock = asyncio.Lock()
+_heatmap_lock: asyncio.Lock = asyncio.Lock()
+_globe_heatmap_lock: asyncio.Lock = asyncio.Lock()
 _leaderboard_lock: asyncio.Lock = asyncio.Lock()
 
 router = APIRouter(tags=["activity"])
@@ -45,7 +49,7 @@ async def get_heatmap(
         return _heatmap_cache[cache_key]
 
     async with _heatmap_lock:
-        if cache_key in _heatmap_cache:   # double-check after acquiring lock
+        if cache_key in _heatmap_cache:  # double-check after acquiring lock
             return _heatmap_cache[cache_key]
         async with _pool(request).acquire() as conn:
             rows = await conn.fetch(
@@ -72,6 +76,56 @@ async def get_heatmap(
     return result
 
 
+# ── Globe heatmap ────────────────────────────────────────────────────────────
+
+@router.get("/api/overview/globe-heatmap")
+async def get_globe_heatmap(
+    request: Request,
+    weeks: int = Query(52, ge=1, le=104),
+    limit: int = Query(250, ge=1, le=1000),
+) -> list[dict[str, Any]]:
+    cache_key = ("globe_heatmap", weeks, limit)
+    if cache_key in _globe_heatmap_cache:
+        return _globe_heatmap_cache[cache_key]
+
+    async with _globe_heatmap_lock:
+        if cache_key in _globe_heatmap_cache:
+            return _globe_heatmap_cache[cache_key]
+        async with _pool(request).acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    u.lat,
+                    u.lng,
+                    u.country,
+                    COUNT(*)::int AS count
+                FROM events e
+                JOIN users u ON e.actor_username = u.username
+                WHERE e.time >= NOW() - make_interval(weeks => $1::int)
+                  AND u.lat IS NOT NULL
+                  AND u.lng IS NOT NULL
+                  AND u.is_bot = FALSE
+                GROUP BY u.lat, u.lng, u.country
+                ORDER BY count DESC, u.country NULLS LAST, u.lat, u.lng
+                LIMIT $2
+                """,
+                weeks,
+                limit,
+            )
+
+        result = [
+            {
+                "lat": float(r["lat"]),
+                "lng": float(r["lng"]),
+                "country": r["country"],
+                "count": r["count"],
+            }
+            for r in rows
+        ]
+        _globe_heatmap_cache[cache_key] = result
+    return result
+
+
 # ── Leaderboard ───────────────────────────────────────────────────────────────
 
 @router.get("/api/activity/leaderboard")
@@ -85,7 +139,7 @@ async def get_leaderboard(
         return _leaderboard_cache[cache_key]
 
     async with _leaderboard_lock:
-        if cache_key in _leaderboard_cache:   # double-check after acquiring lock
+        if cache_key in _leaderboard_cache:  # double-check after acquiring lock
             return _leaderboard_cache[cache_key]
         async with _pool(request).acquire() as conn:
             if scope == "users":

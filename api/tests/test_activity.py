@@ -5,16 +5,23 @@ from unittest.mock import AsyncMock, MagicMock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from routers.activity import router, _leaderboard_cache, _heatmap_cache
+from routers.activity import (
+    router,
+    _globe_heatmap_cache,
+    _leaderboard_cache,
+    _heatmap_cache,
+)
 
 
 @pytest.fixture(autouse=True)
 def clear_caches():
     _leaderboard_cache.clear()
     _heatmap_cache.clear()
+    _globe_heatmap_cache.clear()
     yield
     _leaderboard_cache.clear()
     _heatmap_cache.clear()
+    _globe_heatmap_cache.clear()
 
 
 @pytest.fixture
@@ -66,6 +73,40 @@ def test_heatmap_cache_hit_skips_db(client):
     conn.fetch.return_value = []
     test_client.get("/api/overview/heatmap")
     test_client.get("/api/overview/heatmap")
+    assert conn.fetch.call_count == 1
+
+
+# ── /api/overview/globe-heatmap ───────────────────────────────────────────────
+
+def test_globe_heatmap_returns_list(client):
+    test_client, conn = client
+    conn.fetch.return_value = [
+        {"lat": 48.137154, "lng": 11.576124, "country": "Germany", "count": 17}
+    ]
+    resp = test_client.get("/api/overview/globe-heatmap")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert data[0]["lat"] == 48.137154
+    assert data[0]["lng"] == 11.576124
+    assert data[0]["country"] == "Germany"
+    assert data[0]["count"] == 17
+
+
+def test_globe_heatmap_default_args_are_bounded(client):
+    test_client, conn = client
+    conn.fetch.return_value = []
+    test_client.get("/api/overview/globe-heatmap")
+    _sql, weeks_arg, limit_arg = conn.fetch.call_args[0]
+    assert weeks_arg == 52
+    assert limit_arg == 250
+
+
+def test_globe_heatmap_cache_hit_skips_db(client):
+    test_client, conn = client
+    conn.fetch.return_value = []
+    test_client.get("/api/overview/globe-heatmap")
+    test_client.get("/api/overview/globe-heatmap")
     assert conn.fetch.call_count == 1
 
 

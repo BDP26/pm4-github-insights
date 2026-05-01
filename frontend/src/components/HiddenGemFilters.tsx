@@ -138,7 +138,7 @@ export default function HiddenGemFilters({
 
           <div className="ml-auto text-xs text-slate-500 flex items-center gap-1 bg-slate-100 px-3 py-1.5 rounded-full">
             <Info className="w-4 h-4" />
-            Weights: α=1.0 (Stars), β=1.0 (Forks)
+            Score uses Poisson-SF; α=1.0 (Stars), β=1.0 (Forks)
           </div>
         </div>
       )}

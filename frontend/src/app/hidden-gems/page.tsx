@@ -166,8 +166,9 @@ export default function HiddenGemsPage() {
           <p className="mt-1 text-slate-600">
             Repositories showing statistically significant growth, ranked by{" "}
             <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">
-              sig_score = -ln(1 − Poisson-CDF)
+              sig_score = -ln(Poisson-SF) / 34.5 × 10
             </code>
+            {" "}with score ≥ 3 treated as significant.
           </p>
         </div>
 

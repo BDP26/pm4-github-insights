@@ -27,6 +27,13 @@ interface KpisResponse {
   totalStars:          KpiRaw;
 }
 
+export interface GeoHeatmapPoint {
+  lat: number;
+  lng: number;
+  country: string | null;
+  count: number;
+}
+
 // ── Public fetch functions ────────────────────────────────────────────────────
 export async function fetchKpis(): Promise<KpiMetric[]> {
   const d = await apiFetch<KpisResponse>("/api/kpis");
@@ -91,4 +98,14 @@ export async function fetchTopRepos(limit = 10): Promise<RepoActivity[]> {
 
 export async function fetchRecentEvents(limit = 20): Promise<RecentEvent[]> {
   return apiFetch<RecentEvent[]>(`/api/recent-events?limit=${limit}`);
+}
+
+export async function fetchGeoHeatmap(weeks = 52, limit = 250): Promise<GeoHeatmapPoint[]> {
+  const publicBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const res = await fetch(
+    `${publicBaseUrl}/api/overview/globe-heatmap?weeks=${weeks}&limit=${limit}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(`API /api/overview/globe-heatmap returned ${res.status}`);
+  return res.json() as Promise<GeoHeatmapPoint[]>;
 }

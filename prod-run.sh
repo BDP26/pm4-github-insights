@@ -59,6 +59,8 @@ PHOTON_REGION="$PHOTON_REGION" docker compose --profile "$PROFILE" up -d
 
 info "Done."
 echo ""
+echo "  Frontend will be rebuilt from frontend/package.json during docker compose build"
+echo "  If you changed frontend dependencies, the next server deploy must rebuild the frontend image"
 echo "  Follow all logs:      docker compose --profile $PROFILE logs -f"
 echo "  Follow consumer logs: docker logs -f github-consumer-0"
 echo "  Kafka UI:             http://localhost:8080"
