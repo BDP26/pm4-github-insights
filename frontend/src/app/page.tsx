@@ -1,10 +1,10 @@
-import nextDynamic from "next/dynamic";
 import { Suspense } from "react";
 import { Title, Text } from "@tremor/react";
 import KpiCard from "@/components/KpiCard";
 import CommitsChart from "@/components/CommitsChart";
 import RepoActivityChart from "@/components/RepoActivityChart";
 import ActivityHeatmap from "@/components/ActivityHeatmap";
+import ActivityGlobeLoader from "@/components/ActivityGlobeLoader";
 import LiveEventsTable from "@/components/LiveEventsTable";
 import {
   fetchKpis,
@@ -19,16 +19,6 @@ import {
   recentEvents as mockEvents,
 } from "@/lib/mockData";
 import type { KpiMetric, CommitDataPoint, RepoActivity, RecentEvent } from "@/types/dashboard";
-
-const ActivityGlobe = nextDynamic(() => import("@/components/ActivityGlobe"), {
-  ssr: false,
-  loading: () => (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 animate-pulse">
-      <div className="h-4 w-44 bg-slate-200 rounded mb-4" />
-      <div className="h-[420px] rounded-2xl bg-slate-100" />
-    </div>
-  ),
-});
 
 // Always render fresh — data is real-time
 export const dynamic = "force-dynamic";
@@ -134,7 +124,7 @@ export default function OverviewPage() {
       <ActivityHeatmap />
 
       {/* Globe heatmap — client island, rendered as a continuous intensity layer */}
-      <ActivityGlobe />
+      <ActivityGlobeLoader />
 
       {/* Live events table — streams in, then SSE takes over */}
       <Suspense fallback={<TableSkeleton />}>
