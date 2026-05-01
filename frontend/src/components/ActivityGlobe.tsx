@@ -226,8 +226,8 @@ export default function ActivityGlobe() {
               labelSize={(d: GlobeCityLabel) => Math.max(d.size, 0.8)}
               labelDotRadius={(d: GlobeCityLabel) => d.dotRadius}
               labelColor={(d: GlobeCityLabel) => d.color}
-              // Position labels close to globe surface, aligned with atmosphere layer
-              labelAltitude={0.25}
+              // Position labels directly on globe surface
+              labelAltitude={0.02}
               labelResolution={2}
               {...heatmapConfig}
               enablePointerInteraction={false}
