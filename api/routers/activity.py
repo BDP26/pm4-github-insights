@@ -7,7 +7,7 @@ GET /api/activity/leaderboard?scope=repos|users|orgs&limit=20
 """
 
 import asyncio
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 import asyncpg
 from cachetools import TTLCache
@@ -81,8 +81,8 @@ async def get_heatmap(
 @router.get("/api/overview/globe-heatmap")
 async def get_globe_heatmap(
     request: Request,
-    hours: int = Query(168, ge=1, le=8760),
-    limit: int = Query(250, ge=1, le=1000),
+    hours: Optional[int] = Query(None, ge=1, le=87600),
+    limit: int = Query(2000, ge=1, le=5000),
 ) -> list[dict[str, Any]]:
     cache_key = ("globe_heatmap", hours, limit)
     if cache_key in _globe_heatmap_cache:
@@ -92,26 +92,46 @@ async def get_globe_heatmap(
         if cache_key in _globe_heatmap_cache:
             return _globe_heatmap_cache[cache_key]
         async with _pool(request).acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT
-                    u.lat,
-                    u.lng,
-                    u.country,
-                    COUNT(*)::int AS count
-                FROM events e
-                JOIN users u ON e.actor_username = u.username
-                WHERE e.time >= NOW() - make_interval(hours => $1::int)
-                  AND u.lat IS NOT NULL
-                  AND u.lng IS NOT NULL
-                  AND u.is_bot = FALSE
-                GROUP BY u.lat, u.lng, u.country
-                ORDER BY count DESC, u.country NULLS LAST, u.lat, u.lng
-                LIMIT $2
-                """,
-                hours,
-                limit,
-            )
+            if hours is not None:
+                rows = await conn.fetch(
+                    """
+                    SELECT
+                        u.lat,
+                        u.lng,
+                        u.country,
+                        COUNT(*)::int AS count
+                    FROM events e
+                    JOIN users u ON e.actor_username = u.username
+                    WHERE e.time >= NOW() - make_interval(hours => $1::int)
+                      AND u.lat IS NOT NULL
+                      AND u.lng IS NOT NULL
+                      AND u.is_bot = FALSE
+                    GROUP BY u.lat, u.lng, u.country
+                    ORDER BY count DESC, u.country NULLS LAST, u.lat, u.lng
+                    LIMIT $2
+                    """,
+                    hours,
+                    limit,
+                )
+            else:
+                rows = await conn.fetch(
+                    """
+                    SELECT
+                        u.lat,
+                        u.lng,
+                        u.country,
+                        COUNT(*)::int AS count
+                    FROM events e
+                    JOIN users u ON e.actor_username = u.username
+                    WHERE u.lat IS NOT NULL
+                      AND u.lng IS NOT NULL
+                      AND u.is_bot = FALSE
+                    GROUP BY u.lat, u.lng, u.country
+                    ORDER BY count DESC, u.country NULLS LAST, u.lat, u.lng
+                    LIMIT $1
+                    """,
+                    limit,
+                )
 
         result = [
             {

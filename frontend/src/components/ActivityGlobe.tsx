@@ -7,9 +7,9 @@ import { fetchGeoHeatmap, type GeoHeatmapPoint } from "@/lib/api";
 const Globe = GlobeBase as unknown as ComponentType<any>;
 
 function heatmapColorFn(t: number): string {
-  // t: 0 (cold) → 1 (hot)
+  if (t <= 0) return "rgba(0,0,0,0)";
   const stops: [number, number, number, number][] = [
-    [254, 249, 195, 0.0],
+    [254, 249, 195, 0.35],
     [251, 191,  36, 0.65],
     [249, 115,  22, 0.85],
     [220,  38,  38, 0.95],
@@ -23,13 +23,14 @@ function heatmapColorFn(t: number): string {
   return `rgba(${Math.round(r1 + f*(r2-r1))},${Math.round(g1 + f*(g2-g1))},${Math.round(b1 + f*(b2-b1))},${(a1 + f*(a2-a1)).toFixed(2)})`;
 }
 
-const TIMEFRAMES = [
-  { label: "24h",    hours: 24  },
-  { label: "1 week", hours: 168 },
-  { label: "1 month",hours: 720 },
-] as const;
+type Hours = number | null;
 
-type Hours = typeof TIMEFRAMES[number]["hours"];
+const TIMEFRAMES: { label: string; hours: Hours }[] = [
+  { label: "24h",      hours: 24   },
+  { label: "1 week",   hours: 168  },
+  { label: "1 month",  hours: 720  },
+  { label: "All time", hours: null },
+];
 
 function checkWebGL(): boolean {
   try {
@@ -43,7 +44,7 @@ function checkWebGL(): boolean {
 export default function ActivityGlobe() {
   const globeRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [hours, setHours] = useState<Hours>(168);
+  const [hours, setHours] = useState<Hours>(null);
   const [data, setData] = useState<GeoHeatmapPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
