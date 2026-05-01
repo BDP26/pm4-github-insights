@@ -25,8 +25,8 @@ type NaturalEarthFeature = {
   };
 };
 
-// Import the Natural Earth data from a local TypeScript module (avoids raw JSON parsing during build).
-import naturalEarthData from "./natural-earth-cities.json";
+// Import the Natural Earth data from a local TypeScript module (full dataset, no runtime fetch).
+import naturalEarthData from "./natural-earth-cities";
 
 let cityLabelsPromise: Promise<GlobeCityLabel[]> | null = null;
 
