@@ -51,8 +51,10 @@ BEGIN
     -- Accumulate upper tail via log-sum-exp
     FOR i IN (k + 2)..max_iter LOOP
         log_term := log_term + LN(lambda) - LN(i::FLOAT);
+        -- Guard against underflow: if log_term is negligibly small vs log_sf, exit early.
+        -- This prevents EXP() from being called with extremely negative arguments.
+        EXIT WHEN (log_term - log_sf) < -708.0;
         log_sf   := log_sf + LN(1.0 + EXP(log_term - log_sf));
-        EXIT WHEN (log_term - log_sf) < -34.5;
     END LOOP;
 
     -- Guard against float8 underflow: EXP(x) throws "value out of range" for x < ~-745.
