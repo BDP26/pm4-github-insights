@@ -12,6 +12,8 @@ export type GlobeCityLabel = {
   population: number;
 };
 
+import naturalEarthData from "./natural-earth-cities.json";
+
 type NaturalEarthFeature = {
   properties?: {
     name?: string | null;
@@ -24,12 +26,6 @@ type NaturalEarthFeature = {
     megacity?: number | null;
   };
 };
-
-type NaturalEarthCollection = {
-  features?: NaturalEarthFeature[];
-};
-
-const CITY_DATA_URL = "https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@master/geojson/ne_110m_populated_places_simple.geojson";
 
 let cityLabelsPromise: Promise<GlobeCityLabel[]> | null = null;
 
@@ -74,20 +70,19 @@ function toLabel(feature: NaturalEarthFeature): GlobeCityLabel | null {
   };
 }
 
-async function loadCityLabels(): Promise<GlobeCityLabel[]> {
-  const response = await fetch(CITY_DATA_URL);
-  if (!response.ok) {
-    throw new Error(`Failed to load city labels (${response.status})`);
-  }
-
-  const payload = (await response.json()) as NaturalEarthCollection;
-  const features = Array.isArray(payload.features) ? payload.features : [];
-  return features.map(toLabel).filter((label): label is GlobeCityLabel => label !== null).sort((left, right) => {
-    if (right.population !== left.population) return right.population - left.population;
-    return left.text.localeCompare(right.text);
-  });
+function loadCityLabels(): Promise<GlobeCityLabel[]> {
+  const features = Array.isArray(naturalEarthData.features) ? naturalEarthData.features : [];
+  const labels = features
+    .map(toLabel)
+    .filter((label): label is GlobeCityLabel => label !== null)
+    .sort((left, right) => {
+      if (right.population !== left.population) return right.population - left.population;
+      return left.text.localeCompare(right.text);
+    });
+  return Promise.resolve(labels);
 }
 
+// Load city labels from local bundled Natural Earth data (no network required).
 export async function fetchGlobeCityLabels(): Promise<GlobeCityLabel[]> {
   cityLabelsPromise ??= loadCityLabels();
   return cityLabelsPromise;
