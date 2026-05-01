@@ -9,12 +9,7 @@ RETURNS FLOAT
 LANGUAGE SQL
 STABLE
 AS $$
-    SELECT EXP(-lambda) * SUM(
-        POWER(lambda, s.i) / EXP(
-            COALESCE((SELECT SUM(LN(n)) FROM generate_series(1, s.i) AS n), 0)
-        )
-    )
-    FROM generate_series(0, numb_stars) AS s(i)
+    SELECT LEAST(GREATEST(1.0 - F_poisson_sf(numb_stars, lambda), 0.0), 1.0)
 $$;
 
 CREATE OR REPLACE FUNCTION F_poisson_sf(
