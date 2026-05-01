@@ -101,9 +101,8 @@ export async function fetchRecentEvents(limit = 20): Promise<RecentEvent[]> {
 }
 
 export async function fetchGeoHeatmap(hours = 168, limit = 250): Promise<GeoHeatmapPoint[]> {
-  const publicBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
   const res = await fetch(
-    `${publicBaseUrl}/api/overview/globe-heatmap?hours=${hours}&limit=${limit}`,
+    `/api/overview/globe-heatmap?hours=${hours}&limit=${limit}`,
     { cache: "no-store" },
   );
   if (!res.ok) throw new Error(`API /api/overview/globe-heatmap returned ${res.status}`);

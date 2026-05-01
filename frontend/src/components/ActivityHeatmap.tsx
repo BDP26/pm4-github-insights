@@ -40,7 +40,7 @@ function intensityKey(count: number): string {
   return "max";
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API = "";
 
 export default function ActivityHeatmap() {
   const [data, setData] = useState<HeatmapPoint[]>([]);

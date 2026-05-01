@@ -9,7 +9,7 @@ interface Props {
   initialEvents: RecentEvent[];
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_BASE = "";
 const SSE_URL  = `${API_BASE}/stream/events`;
 
 // Poll interval when SSE is disconnected — keeps table fresh even without SSE

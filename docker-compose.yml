@@ -314,8 +314,6 @@ services:
     build:
       context: ./frontend
       network: host
-      args:
-        NEXT_PUBLIC_API_URL: http://localhost:8000
     pull_policy: build
     container_name: github-frontend
     networks: [github-stream]
