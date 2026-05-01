@@ -18,6 +18,31 @@ const INTERVAL_FRAMES: { label: string; hours: number }[] = [
   { label: "1 month", hours: 720 },
 ];
 
+function createFakeHeatmapData(): GeoHeatmapPoint[] {
+  const points: GeoHeatmapPoint[] = [];
+  const hotspots = [
+    { lat: 48.137154, lng: 11.576124, count: 80 },
+    { lat: 52.52, lng: 13.405, count: 65 },
+    { lat: 37.7749, lng: -122.4194, count: 72 },
+    { lat: 51.5074, lng: -0.1278, count: 58 },
+    { lat: 35.6762, lng: 139.6503, count: 90 },
+    { lat: -33.8688, lng: 151.2093, count: 44 },
+  ];
+
+  hotspots.forEach((hotspot) => {
+    for (let index = 0; index < 12; index += 1) {
+      points.push({
+        lat: hotspot.lat + (Math.random() - 0.5) * 6,
+        lng: hotspot.lng + (Math.random() - 0.5) * 6,
+        country: "Fake data",
+        count: Math.max(1, Math.round(hotspot.count * (0.35 + Math.random() * 0.65))),
+      });
+    }
+  });
+
+  return points;
+}
+
 function checkWebGL(): boolean {
   try {
     const canvas = document.createElement("canvas");
@@ -32,6 +57,8 @@ export default function ActivityGlobe() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [hours, setHours]               = useState<Hours>(null);
   const [data, setData]                 = useState<GeoHeatmapPoint[]>([]);
+  const [showFakeData, setShowFakeData] = useState(false);
+  const [fakeData] = useState<GeoHeatmapPoint[]>(() => createFakeHeatmapData());
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState(false);
   const [size, setSize]                 = useState({ width: 0, height: 0 });
@@ -63,9 +90,11 @@ export default function ActivityGlobe() {
   useEffect(() => {
     if (!globeRef.current) return;
     globeRef.current.pointOfView({ lat: 18, lng: 10, altitude: 2.2 }, 1200);
-  }, [data.length]);
+  }, [data.length, showFakeData]);
 
-  const heatmapLayer = [data];
+  const visibleData = showFakeData ? fakeData : data;
+
+  const heatmapLayer = [visibleData];
 
   const heatmapConfig = {
     heatmapPointLat:    "lat",
@@ -116,6 +145,17 @@ export default function ActivityGlobe() {
             }`}
           >
             All time
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowFakeData(!showFakeData)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+              showFakeData
+                ? "bg-amber-50 text-amber-700 border-amber-200"
+                : "bg-slate-50 text-slate-500 border-slate-200 hover:text-slate-700"
+            }`}
+          >
+            {showFakeData ? "Fake data on" : "Show fake data"}
           </button>
           <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 ml-1">
             <span className="inline-flex h-2 w-2 rounded-full bg-orange-400/80" />
@@ -170,7 +210,9 @@ export default function ActivityGlobe() {
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-4 text-xs text-slate-500">
-        <span>{data.length.toLocaleString()} aggregated geo locations</span>
+        <span>
+          {visibleData.length.toLocaleString()} {showFakeData ? "fake" : "aggregated"} geo locations
+        </span>
         <span>heatmap layer only, no discrete markers</span>
       </div>
     </section>
