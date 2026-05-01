@@ -26,7 +26,9 @@ type NaturalEarthFeature = {
 };
 
 // Import the Natural Earth data from a local TypeScript module (avoids raw JSON parsing during build).
-import naturalEarthData from "./natural-earth-cities";
+// Load Natural Earth data from the app `public` folder at runtime to avoid
+// bundler/TypeScript JSON parsing errors during build. This keeps the data
+// local to the app (no external CDN) and allows using the full dataset.
 
 let cityLabelsPromise: Promise<GlobeCityLabel[]> | null = null;
 
@@ -72,17 +74,24 @@ function toLabel(feature: NaturalEarthFeature): GlobeCityLabel | null {
 }
 
 function loadCityLabels(): Promise<GlobeCityLabel[]> {
-  // Use type assertion to safely extract features from the JSON
-  const data = naturalEarthData as unknown as { features?: NaturalEarthFeature[] };
-  const features = Array.isArray(data?.features) ? data.features : [];
-  const labels = features
-    .map(toLabel)
-    .filter((label): label is GlobeCityLabel => label !== null)
-    .sort((left, right) => {
-      if (right.population !== left.population) return right.population - left.population;
-      return left.text.localeCompare(right.text);
+  // Fetch the full Natural Earth GeoJSON from the `public` folder at runtime.
+  return fetch("/natural-earth-cities.json")
+    .then((res) => {
+      if (!res.ok) throw new Error("failed to load city data");
+      return res.json();
+    })
+    .then((data: unknown) => {
+      const d = data as { features?: NaturalEarthFeature[] };
+      const features = Array.isArray(d?.features) ? d.features : [];
+      const labels = features
+        .map(toLabel)
+        .filter((label): label is GlobeCityLabel => label !== null)
+        .sort((left, right) => {
+          if (right.population !== left.population) return right.population - left.population;
+          return left.text.localeCompare(right.text);
+        });
+      return labels;
     });
-  return Promise.resolve(labels);
 }
 
 // Load city labels from local bundled Natural Earth data (no network required).

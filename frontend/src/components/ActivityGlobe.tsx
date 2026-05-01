@@ -146,7 +146,7 @@ export default function ActivityGlobe() {
                   : "bg-slate-50 text-slate-500 border-slate-200 hover:text-slate-700"
               }`}
             >
-              Städte
+              Show Cities
             </button>
           </div>
           {/* dedicated all-time button */}
@@ -221,9 +221,11 @@ export default function ActivityGlobe() {
               labelLat={(d: GlobeCityLabel) => d.lat}
               labelLng={(d: GlobeCityLabel) => d.lng}
               labelText={(d: GlobeCityLabel) => d.text}
-              labelSize={(d: GlobeCityLabel) => d.size}
+              labelSize={(d: GlobeCityLabel) => Math.max(d.size, 0.8)}
               labelDotRadius={(d: GlobeCityLabel) => d.dotRadius}
               labelColor={(d: GlobeCityLabel) => d.color}
+              // Render labels above heatmap by placing them at a higher altitude
+              labelAltitude={0.95}
               labelResolution={2}
               {...heatmapConfig}
               enablePointerInteraction={false}
