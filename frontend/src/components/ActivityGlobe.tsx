@@ -34,8 +34,7 @@ export default function ActivityGlobe() {
   const [error, setError]               = useState(false);
   const [cityLoading, setCityLoading]   = useState(false);
   const [cityError, setCityError]       = useState(false);
-  const [showCapitals, setShowCapitals] = useState(false);
-  const [showMajorCities, setShowMajorCities] = useState(false);
+  const [showCities, setShowCities]     = useState(false);
   const [size, setSize]                 = useState({ width: 0, height: 0 });
   const [webglAvailable, setWebglAvailable] = useState<boolean | null>(null);
 
@@ -68,7 +67,7 @@ export default function ActivityGlobe() {
   }, [data.length]);
 
   useEffect(() => {
-    if (!showCapitals && !showMajorCities) return;
+    if (!showCities) return;
     if (cityLabels.length > 0 || cityLoading) return;
 
     let active = true;
@@ -91,15 +90,13 @@ export default function ActivityGlobe() {
     return () => {
       active = false;
     };
-  }, [cityLabels.length, cityLoading, showCapitals, showMajorCities]);
+  }, [cityLabels.length, cityLoading, showCities]);
 
   const heatmapLayer = [data];
 
-  const cityOverlay = cityLabels.filter((label: GlobeCityLabel) => {
-    const matchesCapitals = showCapitals && label.categories.includes("capital");
-    const matchesMajorCities = showMajorCities && label.categories.includes("major");
-    return matchesCapitals || matchesMajorCities;
-  });
+  const cityOverlay = showCities
+    ? cityLabels.filter((label: GlobeCityLabel) => label.categories.length > 0)
+    : [];
 
   const heatmapConfig = {
     heatmapPointLat:    "lat",
@@ -142,25 +139,14 @@ export default function ActivityGlobe() {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setShowCapitals((value: boolean) => !value)}
+              onClick={() => setShowCities((value: boolean) => !value)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                showCapitals
-                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                showCities
+                  ? "bg-blue-50 text-blue-700 border-blue-200"
                   : "bg-slate-50 text-slate-500 border-slate-200 hover:text-slate-700"
               }`}
             >
-              Hauptstädte
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowMajorCities((value: boolean) => !value)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                showMajorCities
-                  ? "bg-sky-50 text-sky-700 border-sky-200"
-                  : "bg-slate-50 text-slate-500 border-slate-200 hover:text-slate-700"
-              }`}
-            >
-              Großstädte
+              Städte
             </button>
           </div>
           {/* dedicated all-time button */}
@@ -200,13 +186,13 @@ export default function ActivityGlobe() {
           </div>
         )}
 
-        {cityError && (showCapitals || showMajorCities) && !error && (
+        {cityError && showCities && !error && (
           <div className="absolute left-4 top-4 z-10 rounded-lg border border-amber-200 bg-white/90 px-3 py-2 text-xs text-amber-700 shadow-sm">
             City labels could not be loaded.
           </div>
         )}
 
-        {cityLoading && (showCapitals || showMajorCities) && (
+        {cityLoading && showCities && (
           <div className="absolute left-4 top-4 z-10 rounded-lg border border-sky-200 bg-white/90 px-3 py-2 text-xs text-sky-700 shadow-sm">
             Loading city labels...
           </div>
@@ -250,9 +236,9 @@ export default function ActivityGlobe() {
       <div className="mt-3 flex items-center justify-between gap-4 text-xs text-slate-500">
         <span>{data.length.toLocaleString()} aggregated geo locations</span>
         <span>
-          {showCapitals || showMajorCities
+          {showCities && cityOverlay.length > 0
             ? `${cityOverlay.length.toLocaleString()} city labels shown`
-            : "heatmap layer only, no discrete markers"}
+            : "heatmap layer only"}
         </span>
       </div>
     </section>

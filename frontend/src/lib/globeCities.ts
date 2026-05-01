@@ -53,17 +53,17 @@ function toLabel(feature: NaturalEarthFeature): GlobeCityLabel | null {
   if (isMajorCity) categories.push("major");
 
   const primaryKind: GlobeCityKind = isCapital ? "capital" : "major";
-  const baseSize = primaryKind === "capital" ? 0.42 : 0.34;
-  const scaledSize = Math.sqrt(Math.max(population, 1)) * (primaryKind === "capital" ? 0.00038 : 0.00034);
-  const size = Math.max(baseSize, Math.min(primaryKind === "capital" ? 1.0 : 1.12, scaledSize));
+  const baseSize = primaryKind === "capital" ? 0.62 : 0.54;
+  const scaledSize = Math.sqrt(Math.max(population, 1)) * (primaryKind === "capital" ? 0.00048 : 0.00044);
+  const size = Math.max(baseSize, Math.min(primaryKind === "capital" ? 1.2 : 1.32, scaledSize));
 
   return {
     lat,
     lng,
     text: name,
     size,
-    dotRadius: size * 0.44,
-    color: primaryKind === "capital" ? "rgba(245, 158, 11, 0.82)" : "rgba(14, 165, 233, 0.75)",
+    dotRadius: size * 0.52,
+    color: "rgba(255, 255, 255, 0.92)",
     categories,
     primaryKind,
     population,
