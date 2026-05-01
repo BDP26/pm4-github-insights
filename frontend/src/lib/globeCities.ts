@@ -96,6 +96,10 @@ function loadCityLabels(): Promise<GlobeCityLabel[]> {
 
 // Load city labels from local bundled Natural Earth data (no network required).
 export async function fetchGlobeCityLabels(): Promise<GlobeCityLabel[]> {
-  cityLabelsPromise ??= loadCityLabels();
+  cityLabelsPromise ??= loadCityLabels().catch((error) => {
+    // Allow retries after transient/network/public-file failures.
+    cityLabelsPromise = null;
+    throw error;
+  });
   return cityLabelsPromise;
 }
