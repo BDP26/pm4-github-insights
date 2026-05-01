@@ -1,4 +1,58 @@
 
+----------------- CALC POISSINB CDF (qpois())
+
+CREATE OR REPLACE FUNCTION F_poisson(
+    numb_stars       INT,      -- upper bound (inclusive)
+    lambda  FLOAT     -- expected rate
+)
+RETURNS FLOAT
+LANGUAGE SQL
+STABLE
+AS $$
+    SELECT EXP(-lambda) * SUM(
+        POWER(lambda, s.i) / EXP(
+            COALESCE((SELECT SUM(LN(n)) FROM generate_series(1, s.i) AS n), 0)
+        )
+    )
+    FROM generate_series(0, numb_stars) AS s(i)
+$$;
+
+CREATE OR REPLACE FUNCTION F_poisson_sf(
+    k       INT,
+    lambda  FLOAT
+)
+RETURNS FLOAT
+LANGUAGE plpgsql
+IMMUTABLE STRICT
+AS $$
+DECLARE
+    log_term  FLOAT;
+    log_sf    FLOAT;
+    max_iter  INT := GREATEST(k + 200, 1000);
+    i         INT;
+BEGIN
+    IF lambda <= 0 THEN RETURN 1.0; END IF;
+
+    -- Build log P(X = k+1) iteratively
+    log_term := -lambda;
+    FOR i IN 1..(k + 1) LOOP
+        log_term := log_term + LN(lambda) - LN(i::FLOAT);
+    END LOOP;
+
+    log_sf := log_term;
+
+    -- Accumulate upper tail via log-sum-exp
+    FOR i IN (k + 2)..max_iter LOOP
+        log_term := log_term + LN(lambda) - LN(i::FLOAT);
+        log_sf   := log_sf + LN(1.0 + EXP(log_term - log_sf));
+        EXIT WHEN (log_term - log_sf) < -34.5;
+    END LOOP;
+
+    RETURN LEAST(EXP(log_sf), 1.0);
+END;
+$$;
+
+
 
 ----------------- CALC POISSINB CDF (qpois())
 CREATE OR REPLACE FUNCTION calc_lambda(
@@ -91,6 +145,7 @@ END;
 $$;
 
 
+
 ----------------- COMBINED POISSONM_CDF AND SIGSCORE
 
 CREATE OR REPLACE FUNCTION calc_rising_star_scores(
@@ -102,22 +157,25 @@ CREATE OR REPLACE FUNCTION calc_rising_star_scores(
     min_forks                INT     -- noise guard: minimum forks for valid score
 )
 RETURNS TABLE (
-    poisson_cdf  FLOAT,  -- P(X <= x_t | lambda)
-    sig_score    FLOAT   -- significance score: -ln(1 - cdf)
+    poisson_cdf  FLOAT,  -- P(X <= x_t | lambda), display only, derived as 1 - SF
+    sig_score    FLOAT   -- significance score: (-ln(SF) / 34.5) * 10, range 0-10
 )
 LANGUAGE plpgsql
 STABLE
 AS $$
 DECLARE
-    v_cdf FLOAT;  -- intermediate CDF value to avoid double calculation
+    v_sf  FLOAT;
 BEGIN
-    -- calculate CDF once and reuse
-    v_cdf := F_poisson(numb_stars_forks - 1, lambda);
+    v_sf := F_poisson_sf(numb_stars_forks - 1, lambda);
 
     RETURN QUERY
     SELECT
-        v_cdf,
-        calc_sig_score(v_cdf, count_stars_in_interval, count_forks_in_interval, min_stars, min_forks);
+        1.0 - v_sf,  -- cdf nur zur Anzeige
+        CASE
+            WHEN (count_stars_in_interval < min_stars) OR (count_forks_in_interval < min_forks) THEN NULL
+            WHEN v_sf <= 0 THEN NULL
+            ELSE (-LN(GREATEST(v_sf, 1e-15)) / 34.5) * 10.0
+        END;
 END;
 $$;
 ------------ E N D    OF   F U N C T I O N S-------------------------------------

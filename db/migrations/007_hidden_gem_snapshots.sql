@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS hidden_gem_snapshot_orgs (
 
 CREATE INDEX IF NOT EXISTS idx_snapshot_runs_interval
     ON hidden_gem_snapshot_runs(interval_hours, run_at DESC);
-
+       
 CREATE INDEX IF NOT EXISTS idx_snapshot_repos_fullname
     ON hidden_gem_snapshot_repos(full_name, snapshot_id);
 
@@ -75,7 +75,7 @@ CREATE INDEX IF NOT EXISTS idx_snapshot_orgs_login
 DO $$
 BEGIN
   IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'grafana_reader') THEN
-    EXECUTE 'GRANT SELECT ON hidden_gem_snapshot_runs TO grafana_reader';
+    EXECUTE 'GRANT SELECT ON hidden_gem_snapshot_runs TO grafana_reader';          
     EXECUTE 'GRANT SELECT ON hidden_gem_snapshot_repos TO grafana_reader';
     EXECUTE 'GRANT SELECT ON hidden_gem_snapshot_users TO grafana_reader';
     EXECUTE 'GRANT SELECT ON hidden_gem_snapshot_orgs TO grafana_reader';
