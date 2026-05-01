@@ -55,6 +55,9 @@ BEGIN
         EXIT WHEN (log_term - log_sf) < -34.5;
     END LOOP;
 
+    -- Guard against float8 underflow: EXP(x) throws "value out of range" for x < ~-745.
+    -- A log_sf this negative means SF ≈ 0 (observed >> expected → maximally significant).
+    IF log_sf < -708.0 THEN RETURN 0.0; END IF;
     RETURN LEAST(EXP(log_sf), 1.0);
 END;
 $$;
