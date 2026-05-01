@@ -26,9 +26,7 @@ type NaturalEarthFeature = {
 };
 
 // Import the Natural Earth data from a local TypeScript module (avoids raw JSON parsing during build).
-// Load Natural Earth data from the app `public` folder at runtime to avoid
-// bundler/TypeScript JSON parsing errors during build. This keeps the data
-// local to the app (no external CDN) and allows using the full dataset.
+import naturalEarthData from "./natural-earth-cities.json";
 
 let cityLabelsPromise: Promise<GlobeCityLabel[]> | null = null;
 
@@ -73,31 +71,22 @@ function toLabel(feature: NaturalEarthFeature): GlobeCityLabel | null {
   };
 }
 
-function loadCityLabels(): Promise<GlobeCityLabel[]> {
-  // Fetch the full Natural Earth GeoJSON from the `public` folder at runtime.
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12_000);
-
-  return fetch("/natural-earth-cities.json", { signal: controller.signal })
-    .then((res) => {
-      if (!res.ok) throw new Error("failed to load city data");
-      return res.json();
-    })
-    .then((data: unknown) => {
-      const d = data as { features?: NaturalEarthFeature[] };
-      const features = Array.isArray(d?.features) ? d.features : [];
-      const labels = features
-        .map(toLabel)
-        .filter((label): label is GlobeCityLabel => label !== null)
-        .sort((left, right) => {
-          if (right.population !== left.population) return right.population - left.population;
-          return left.text.localeCompare(right.text);
-        });
-      return labels;
-    })
-    .finally(() => {
-      clearTimeout(timeoutId);
+function toLabelsFromData(data: unknown): GlobeCityLabel[] {
+  const d = data as { features?: NaturalEarthFeature[] };
+  const features = Array.isArray(d?.features) ? d.features : [];
+  return features
+    .map(toLabel)
+    .filter((label): label is GlobeCityLabel => label !== null)
+    .sort((left, right) => {
+      if (right.population !== left.population) return right.population - left.population;
+      return left.text.localeCompare(right.text);
     });
+}
+
+async function loadCityLabels(): Promise<GlobeCityLabel[]> {
+  const labels = toLabelsFromData(naturalEarthData as unknown);
+  if (labels.length > 0) return labels;
+  throw new Error("failed to load city data");
 }
 
 // Load city labels from local bundled Natural Earth data (no network required).
