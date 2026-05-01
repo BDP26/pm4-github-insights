@@ -12,8 +12,6 @@ export type GlobeCityLabel = {
   population: number;
 };
 
-import naturalEarthData from "./natural-earth-cities.json";
-
 type NaturalEarthFeature = {
   properties?: {
     name?: string | null;
@@ -26,6 +24,10 @@ type NaturalEarthFeature = {
     megacity?: number | null;
   };
 };
+
+// Import the Natural Earth data; TypeScript will infer a complex union type.
+// We'll use a type guard to safely access the features.
+import naturalEarthData from "./natural-earth-cities.json";
 
 let cityLabelsPromise: Promise<GlobeCityLabel[]> | null = null;
 
@@ -71,7 +73,9 @@ function toLabel(feature: NaturalEarthFeature): GlobeCityLabel | null {
 }
 
 function loadCityLabels(): Promise<GlobeCityLabel[]> {
-  const features = Array.isArray(naturalEarthData.features) ? naturalEarthData.features : [];
+  // Use type assertion to safely extract features from the JSON
+  const data = naturalEarthData as unknown as { features?: NaturalEarthFeature[] };
+  const features = Array.isArray(data?.features) ? data.features : [];
   const labels = features
     .map(toLabel)
     .filter((label): label is GlobeCityLabel => label !== null)
