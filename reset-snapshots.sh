@@ -47,9 +47,9 @@ fi
 
 wait_for_api
 
-# ── 2. Re-apply 004 migration (scoring functions) ────────────────────────────
+# ── 2. Re-apply 004 + 006 migrations (scoring functions) ─────────────────────
 # docker-entrypoint-initdb.d only runs on first DB init — the volume persists
-# across restarts, so function changes in 004 are never picked up automatically.
+# across restarts, so function changes are never picked up automatically.
 #
 # F_poisson must be dropped first: CREATE OR REPLACE cannot rename parameters.
 info "Dropping F_poisson to allow parameter rename ..."
@@ -63,6 +63,15 @@ docker compose --profile "$PROFILE" exec -T timescaledb \
     --set ON_ERROR_STOP=1 \
     -f /docker-entrypoint-initdb.d/05_migration_004.sql \
     && info "004 migration applied."
+
+# 006 defines hidden_gem_repo_scores / user_scores / org_scores — also not
+# re-applied automatically. Must come AFTER 004 (depends on its functions).
+info "Re-applying db/migrations/006_hidden_gem_aggregations.sql ..."
+docker compose --profile "$PROFILE" exec -T timescaledb \
+    psql -U github -d github_events \
+    --set ON_ERROR_STOP=1 \
+    -f /docker-entrypoint-initdb.d/07_migration_006.sql \
+    && info "006 migration applied."
 
 # ── 3. Wipe snapshot tables via psql inside the timescaledb container ────────
 info "Clearing all snapshot data (TRUNCATE ... CASCADE)..."
