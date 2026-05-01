@@ -81,10 +81,10 @@ async def get_heatmap(
 @router.get("/api/overview/globe-heatmap")
 async def get_globe_heatmap(
     request: Request,
-    weeks: int = Query(52, ge=1, le=104),
+    hours: int = Query(168, ge=1, le=8760),
     limit: int = Query(250, ge=1, le=1000),
 ) -> list[dict[str, Any]]:
-    cache_key = ("globe_heatmap", weeks, limit)
+    cache_key = ("globe_heatmap", hours, limit)
     if cache_key in _globe_heatmap_cache:
         return _globe_heatmap_cache[cache_key]
 
@@ -101,7 +101,7 @@ async def get_globe_heatmap(
                     COUNT(*)::int AS count
                 FROM events e
                 JOIN users u ON e.actor_username = u.username
-                WHERE e.time >= NOW() - make_interval(weeks => $1::int)
+                WHERE e.time >= NOW() - make_interval(hours => $1::int)
                   AND u.lat IS NOT NULL
                   AND u.lng IS NOT NULL
                   AND u.is_bot = FALSE
@@ -109,7 +109,7 @@ async def get_globe_heatmap(
                 ORDER BY count DESC, u.country NULLS LAST, u.lat, u.lng
                 LIMIT $2
                 """,
-                weeks,
+                hours,
                 limit,
             )
 
