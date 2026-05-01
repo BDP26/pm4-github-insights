@@ -71,9 +71,11 @@ export default function ActivityGlobe() {
     heatmapPointLat:    "lat",
     heatmapPointLng:    "lng",
     heatmapPointWeight: "count",
-    heatmapBandwidth:   5,
+    heatmapBandwidth:   1.35,
     heatmapColorFn:     colorFn,
-    heatmapTopAltitude: 0.1,
+    heatmapColorSaturation: 3.2,
+    heatmapTopAltitude: 0.35,
+    heatmapsTransitionDuration: 1500,
   };
 
   return (
@@ -151,7 +153,8 @@ export default function ActivityGlobe() {
               ref={globeRef}
               width={size.width || 800}
               height={size.height || 420}
-              globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
+              globeImageUrl="//cdn.jsdelivr.net/npm/three-globe/example/img/earth-night.jpg"
+              bumpImageUrl="//cdn.jsdelivr.net/npm/three-globe/example/img/earth-topology.png"
               backgroundColor="rgba(255,255,255,0)"
               animateIn={false}
               showAtmosphere={true}
