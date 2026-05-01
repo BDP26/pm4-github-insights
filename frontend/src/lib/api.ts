@@ -100,10 +100,11 @@ export async function fetchRecentEvents(limit = 20): Promise<RecentEvent[]> {
   return apiFetch<RecentEvent[]>(`/api/recent-events?limit=${limit}`);
 }
 
-export async function fetchGeoHeatmap(hours: number | null = null, limit = 2000): Promise<GeoHeatmapPoint[]> {
-  const params = new URLSearchParams({ limit: String(limit) });
-  if (hours !== null) params.set("hours", String(hours));
-  const res = await fetch(`/api/overview/globe-heatmap?${params}`, { cache: "no-store" });
+export async function fetchGeoHeatmap(hours: number | null = null): Promise<GeoHeatmapPoint[]> {
+  const url = hours !== null
+    ? `/api/overview/globe-heatmap?hours=${hours}`
+    : `/api/overview/globe-heatmap`;
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`API /api/overview/globe-heatmap returned ${res.status}`);
   return res.json() as Promise<GeoHeatmapPoint[]>;
 }

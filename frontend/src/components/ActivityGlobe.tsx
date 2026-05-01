@@ -6,30 +6,16 @@ import { fetchGeoHeatmap, type GeoHeatmapPoint } from "@/lib/api";
 
 const Globe = GlobeBase as unknown as ComponentType<any>;
 
-function heatmapColorFn(t: number): string {
-  if (t <= 0) return "rgba(0,0,0,0)";
-  const stops: [number, number, number, number][] = [
-    [254, 249, 195, 0.35],
-    [251, 191,  36, 0.65],
-    [249, 115,  22, 0.85],
-    [220,  38,  38, 0.95],
-    [127,  29,  29, 1.0],
-  ];
-  const n = stops.length - 1;
-  const i = Math.min(n - 1, Math.floor(t * n));
-  const f = t * n - i;
-  const [r1, g1, b1, a1] = stops[i];
-  const [r2, g2, b2, a2] = stops[i + 1];
-  return `rgba(${Math.round(r1 + f*(r2-r1))},${Math.round(g1 + f*(g2-g1))},${Math.round(b1 + f*(b2-b1))},${(a1 + f*(a2-a1)).toFixed(2)})`;
-}
+// t ∈ [0,1] normalised weight → rgba string
+const colorFn = (t: number) =>
+  `rgba(255,${Math.round(220 * (1 - t))},0,${(0.25 + t * 0.75).toFixed(2)})`;
 
 type Hours = number | null;
 
-const TIMEFRAMES: { label: string; hours: Hours }[] = [
-  { label: "24h",      hours: 24   },
-  { label: "1 week",   hours: 168  },
-  { label: "1 month",  hours: 720  },
-  { label: "All time", hours: null },
+const INTERVAL_FRAMES: { label: string; hours: number }[] = [
+  { label: "24h",     hours: 24  },
+  { label: "1 week",  hours: 168 },
+  { label: "1 month", hours: 720 },
 ];
 
 function checkWebGL(): boolean {
@@ -42,51 +28,35 @@ function checkWebGL(): boolean {
 }
 
 export default function ActivityGlobe() {
-  const globeRef = useRef<any>(null);
+  const globeRef     = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [hours, setHours] = useState<Hours>(null);
-  const [data, setData] = useState<GeoHeatmapPoint[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [hours, setHours]               = useState<Hours>(null);
+  const [data, setData]                 = useState<GeoHeatmapPoint[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState(false);
+  const [size, setSize]                 = useState({ width: 0, height: 0 });
   const [webglAvailable, setWebglAvailable] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    setWebglAvailable(checkWebGL());
-  }, []);
+  useEffect(() => { setWebglAvailable(checkWebGL()); }, []);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError(false);
-
     fetchGeoHeatmap(hours)
-      .then((points) => {
-        if (!active) return;
-        setData(points);
-        setLoading(false);
-      })
-      .catch(() => {
-        if (!active) return;
-        setError(true);
-        setLoading(false);
-      });
-
+      .then((pts) => { if (active) { setData(pts); setLoading(false); } })
+      .catch(() => { if (active) { setError(true); setLoading(false); } });
     return () => { active = false; };
   }, [hours]);
 
   useEffect(() => {
-    const element = containerRef.current;
-    if (!element) return;
-    const ro = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      setSize({
-        width: Math.floor(entry.contentRect.width),
-        height: Math.floor(entry.contentRect.height),
-      });
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => {
+      if (!e) return;
+      setSize({ width: Math.floor(e.contentRect.width), height: Math.floor(e.contentRect.height) });
     });
-    ro.observe(element);
+    ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
@@ -94,6 +64,16 @@ export default function ActivityGlobe() {
     if (!globeRef.current) return;
     globeRef.current.pointOfView({ lat: 18, lng: 10, altitude: 2.2 }, 1200);
   }, [data.length]);
+
+  const heatmapLayer = [{
+    data,
+    pointLat:    "lat",
+    pointLng:    "lng",
+    pointWeight: "count",
+    bandwidth:   5,
+    colorFn,
+    topAltitude: 0.1,
+  }];
 
   return (
     <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
@@ -104,9 +84,10 @@ export default function ActivityGlobe() {
             Event intensity by user location, rendered as a heatmap layer.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* interval buttons */}
           <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-1">
-            {TIMEFRAMES.map((tf) => (
+            {INTERVAL_FRAMES.map((tf) => (
               <button
                 key={tf.hours}
                 type="button"
@@ -121,8 +102,20 @@ export default function ActivityGlobe() {
               </button>
             ))}
           </div>
-          <div className="hidden sm:flex items-center gap-2 text-xs text-slate-500">
-            <span className="inline-flex h-2 w-2 rounded-full bg-cyan-400/80" />
+          {/* dedicated all-time button */}
+          <button
+            type="button"
+            onClick={() => setHours(null)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+              hours === null
+                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                : "bg-slate-50 text-slate-500 border-slate-200 hover:text-slate-700"
+            }`}
+          >
+            All time
+          </button>
+          <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-500 ml-1">
+            <span className="inline-flex h-2 w-2 rounded-full bg-orange-400/80" />
             heat layer
           </div>
         </div>
@@ -149,7 +142,7 @@ export default function ActivityGlobe() {
         <div className="relative h-full w-full">
           {webglAvailable === false && (
             <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-slate-500">
-              WebGL is not available in this browser — globe cannot be rendered.
+              WebGL not available — globe cannot be rendered.
             </div>
           )}
           {!error && webglAvailable === true && (
@@ -163,13 +156,7 @@ export default function ActivityGlobe() {
               showAtmosphere={true}
               atmosphereColor="#7dd3fc"
               atmosphereAltitude={0.14}
-              heatmapData={data}
-              heatmapPointLat="lat"
-              heatmapPointLng="lng"
-              heatmapPointWeight="count"
-              heatmapBandwidth={3}
-              heatmapColorFn={heatmapColorFn}
-              heatmapTopAltitude={0.05}
+              heatmapsData={heatmapLayer}
               enablePointerInteraction={false}
               showGraticules={false}
             />

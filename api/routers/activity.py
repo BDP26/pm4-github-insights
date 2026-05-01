@@ -82,9 +82,8 @@ async def get_heatmap(
 async def get_globe_heatmap(
     request: Request,
     hours: Optional[int] = Query(None, ge=1, le=87600),
-    limit: int = Query(2000, ge=1, le=5000),
 ) -> list[dict[str, Any]]:
-    cache_key = ("globe_heatmap", hours, limit)
+    cache_key = ("globe_heatmap", hours)
     if cache_key in _globe_heatmap_cache:
         return _globe_heatmap_cache[cache_key]
 
@@ -108,10 +107,8 @@ async def get_globe_heatmap(
                       AND u.is_bot = FALSE
                     GROUP BY u.lat, u.lng, u.country
                     ORDER BY count DESC, u.country NULLS LAST, u.lat, u.lng
-                    LIMIT $2
                     """,
                     hours,
-                    limit,
                 )
             else:
                 rows = await conn.fetch(
@@ -128,9 +125,7 @@ async def get_globe_heatmap(
                       AND u.is_bot = FALSE
                     GROUP BY u.lat, u.lng, u.country
                     ORDER BY count DESC, u.country NULLS LAST, u.lat, u.lng
-                    LIMIT $1
                     """,
-                    limit,
                 )
 
         result = [
