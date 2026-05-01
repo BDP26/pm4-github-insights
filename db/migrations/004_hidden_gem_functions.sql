@@ -117,35 +117,6 @@ $$;
 
 
 
------------------ CALC LAMBDA
-
-CREATE OR REPLACE FUNCTION calc_lambda(
-    alpha                     FLOAT,
-    beta                      FLOAT,
-    baseline_stars            INT,     -- Stand der Stars vor Zeitfenster
-    baseline_forks            INT,     -- Stand der Forks vor Zeitfenster
-    count_stars_in_intervall  INT,     -- Count wie viele Stars dazu kamen
-    count_forks_in_intervall  INT,
-    repo_age                  FLOAT,   -- Repo alter in Stunden
-    time_interval             INTERVAL     -- Beobachtungsfenster
-)
-RETURNS FLOAT
-LANGUAGE plpgsql as $$
-DECLARE 
-  timeinterval_as_float FLOAT;
-  
-BEGIN 
-  timeinterval_as_float := (EXTRACT(EPOCH FROM time_interval) / 3600.0);
-  IF timeinterval_as_float >= repo_age THEN
-    RETURN (( alpha * count_stars_in_intervall + beta * count_forks_in_intervall ) / repo_age ) * timeinterval_as_float;
-  ELSE 
-    RETURN (( alpha * baseline_stars + beta * baseline_forks ) / repo_age ) * timeinterval_as_float;
-  END IF;
-END;
-$$;
-
-
-
 ----------------- COMBINED POISSONM_CDF AND SIGSCORE
 
 CREATE OR REPLACE FUNCTION calc_rising_star_scores(
