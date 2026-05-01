@@ -25,9 +25,8 @@ type NaturalEarthFeature = {
   };
 };
 
-// Import the Natural Earth data; TypeScript will infer a complex union type.
-// We'll use a type guard to safely access the features.
-import naturalEarthData from "./natural-earth-cities.json";
+// Import the Natural Earth data from a local TypeScript module (avoids raw JSON parsing during build).
+import naturalEarthData from "./natural-earth-cities";
 
 let cityLabelsPromise: Promise<GlobeCityLabel[]> | null = null;
 
