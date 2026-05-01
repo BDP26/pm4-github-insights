@@ -1,4 +1,4 @@
-import dynamic from "next/dynamic";
+import nextDynamic from "next/dynamic";
 import { Suspense } from "react";
 import { Title, Text } from "@tremor/react";
 import KpiCard from "@/components/KpiCard";
@@ -20,7 +20,7 @@ import {
 } from "@/lib/mockData";
 import type { KpiMetric, CommitDataPoint, RepoActivity, RecentEvent } from "@/types/dashboard";
 
-const ActivityGlobe = dynamic(() => import("@/components/ActivityGlobe"), {
+const ActivityGlobe = nextDynamic(() => import("@/components/ActivityGlobe"), {
   ssr: false,
   loading: () => (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 animate-pulse">
