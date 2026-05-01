@@ -33,6 +33,13 @@ DECLARE
 BEGIN
     IF lambda <= 0 THEN RETURN 1.0; END IF;
 
+    -- When k is far below lambda, P(X > k | lambda) ≈ 1.0.
+    -- Avoids log-sum-exp underflow: the algorithm would need to sum up to ~lambda
+    -- terms but max_iter stops at k+1000, missing the bulk of the probability mass.
+    IF k::FLOAT < lambda - 30.0 * SQRT(lambda) THEN
+        RETURN 1.0;
+    END IF;
+
     -- Build log P(X = k+1) iteratively
     log_term := -lambda;
     FOR i IN 1..(k + 1) LOOP
