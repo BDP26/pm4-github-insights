@@ -50,9 +50,17 @@ wait_for_api
 # ── 2. Re-apply 004 migration (scoring functions) ────────────────────────────
 # docker-entrypoint-initdb.d only runs on first DB init — the volume persists
 # across restarts, so function changes in 004 are never picked up automatically.
+#
+# F_poisson must be dropped first: CREATE OR REPLACE cannot rename parameters.
+info "Dropping F_poisson to allow parameter rename ..."
+docker compose --profile "$PROFILE" exec -T timescaledb \
+    psql -U github -d github_events -c \
+    "DROP FUNCTION IF EXISTS F_poisson(integer, double precision) CASCADE;"
+
 info "Re-applying db/migrations/004_hidden_gem_functions.sql ..."
 docker compose --profile "$PROFILE" exec -T timescaledb \
     psql -U github -d github_events \
+    --set ON_ERROR_STOP=1 \
     -f /docker-entrypoint-initdb.d/05_migration_004.sql \
     && info "004 migration applied."
 
@@ -66,8 +74,12 @@ docker compose --profile "$PROFILE" exec -T timescaledb \
 # ── 3. Trigger fresh snapshots for all intervals ─────────────────────────────
 for hours in "${INTERVALS[@]}"; do
     info "Triggering snapshot for interval=${hours}h ..."
-    response=$(curl -sf -X POST "$API_URL/api/hidden-gems/snapshots/trigger?interval_hours=${hours}")
-    info "  Response: $response"
+    response=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$API_URL/api/hidden-gems/snapshots/trigger?interval_hours=${hours}")
+    if [[ "$response" == "200" ]]; then
+        info "  interval=${hours}h → OK (202/200)"
+    else
+        info "  interval=${hours}h → HTTP $response (check API logs)"
+    fi
 done
 
 # ── 4. Show live logs so you can watch progress ──────────────────────────────
