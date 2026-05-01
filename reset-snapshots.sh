@@ -47,7 +47,16 @@ fi
 
 wait_for_api
 
-# ── 2. Wipe snapshot tables via psql inside the timescaledb container ────────
+# ── 2. Re-apply 004 migration (scoring functions) ────────────────────────────
+# docker-entrypoint-initdb.d only runs on first DB init — the volume persists
+# across restarts, so function changes in 004 are never picked up automatically.
+info "Re-applying db/migrations/004_hidden_gem_functions.sql ..."
+docker compose --profile "$PROFILE" exec -T timescaledb \
+    psql -U github -d github_events \
+    -f /docker-entrypoint-initdb.d/05_migration_004.sql \
+    && info "004 migration applied."
+
+# ── 3. Wipe snapshot tables via psql inside the timescaledb container ────────
 info "Clearing all snapshot data (TRUNCATE ... CASCADE)..."
 docker compose --profile "$PROFILE" exec -T timescaledb \
     psql -U github -d github_events -c \
