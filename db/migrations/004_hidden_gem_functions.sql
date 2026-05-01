@@ -152,7 +152,7 @@ BEGIN
         CASE
             WHEN (count_stars_in_interval < min_stars) OR (count_forks_in_interval < min_forks) THEN NULL
             WHEN v_sf <= 0 THEN NULL
-            ELSE (-LN(GREATEST(v_sf, 1e-15)) / 34.5) * 10.0
+            ELSE LEAST((-LN(GREATEST(v_sf, 1e-15)) / 34.5) * 10.0, 10.0)
         END;
 END;
 $$;
