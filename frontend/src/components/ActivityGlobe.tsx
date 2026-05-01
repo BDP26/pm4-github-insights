@@ -6,6 +6,15 @@ import { fetchGeoHeatmap, type GeoHeatmapPoint } from "@/lib/api";
 
 const Globe = GlobeBase as unknown as ComponentType<any>;
 
+function checkWebGL(): boolean {
+  try {
+    const canvas = document.createElement("canvas");
+    return !!(canvas.getContext("webgl") || canvas.getContext("experimental-webgl"));
+  } catch {
+    return false;
+  }
+}
+
 export default function ActivityGlobe() {
   const globeRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -13,6 +22,11 @@ export default function ActivityGlobe() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [webglAvailable, setWebglAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setWebglAvailable(checkWebGL());
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -90,7 +104,12 @@ export default function ActivityGlobe() {
         )}
 
         <div className="relative h-full w-full">
-          {!error && (
+          {webglAvailable === false && (
+            <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-slate-500">
+              WebGL is not available in this browser — globe cannot be rendered.
+            </div>
+          )}
+          {!error && webglAvailable === true && (
             <Globe
               ref={globeRef}
               width={size.width || 800}
