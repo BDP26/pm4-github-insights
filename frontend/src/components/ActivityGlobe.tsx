@@ -65,15 +65,16 @@ export default function ActivityGlobe() {
     globeRef.current.pointOfView({ lat: 18, lng: 10, altitude: 2.2 }, 1200);
   }, [data.length]);
 
-  const heatmapLayer = [{
-    data,
-    pointLat:    "lat",
-    pointLng:    "lng",
-    pointWeight: "count",
-    bandwidth:   5,
-    colorFn,
-    topAltitude: 0.1,
-  }];
+  const heatmapLayer = [data];
+
+  const heatmapConfig = {
+    heatmapPointLat:    "lat",
+    heatmapPointLng:    "lng",
+    heatmapPointWeight: "count",
+    heatmapBandwidth:   5,
+    heatmapColorFn:     colorFn,
+    heatmapTopAltitude: 0.1,
+  };
 
   return (
     <section className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
@@ -157,6 +158,7 @@ export default function ActivityGlobe() {
               atmosphereColor="#7dd3fc"
               atmosphereAltitude={0.14}
               heatmapsData={heatmapLayer}
+              {...heatmapConfig}
               enablePointerInteraction={false}
               showGraticules={false}
             />
