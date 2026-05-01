@@ -6,10 +6,6 @@ import { fetchGeoHeatmap, type GeoHeatmapPoint } from "@/lib/api";
 
 const Globe = GlobeBase as unknown as ComponentType<any>;
 
-// t ∈ [0,1] normalised weight → rgba string
-const colorFn = (t: number) =>
-  `rgba(255,${Math.round(220 * (1 - t))},0,${(0.25 + t * 0.75).toFixed(2)})`;
-
 type Hours = number | null;
 
 const INTERVAL_FRAMES: { label: string; hours: number }[] = [
@@ -19,28 +15,12 @@ const INTERVAL_FRAMES: { label: string; hours: number }[] = [
 ];
 
 function createFakeHeatmapData(): GeoHeatmapPoint[] {
-  const points: GeoHeatmapPoint[] = [];
-  const hotspots = [
-    { lat: 48.137154, lng: 11.576124, count: 80 },
-    { lat: 52.52, lng: 13.405, count: 65 },
-    { lat: 37.7749, lng: -122.4194, count: 72 },
-    { lat: 51.5074, lng: -0.1278, count: 58 },
-    { lat: 35.6762, lng: 139.6503, count: 90 },
-    { lat: -33.8688, lng: 151.2093, count: 44 },
-  ];
-
-  hotspots.forEach((hotspot) => {
-    for (let index = 0; index < 12; index += 1) {
-      points.push({
-        lat: hotspot.lat + (Math.random() - 0.5) * 6,
-        lng: hotspot.lng + (Math.random() - 0.5) * 6,
-        country: "Fake data",
-        count: Math.max(1, Math.round(hotspot.count * (0.35 + Math.random() * 0.65))),
-      });
-    }
-  });
-
-  return points;
+  return Array.from({ length: 900 }, () => ({
+    lat: (Math.random() - 0.5) * 160,
+    lng: (Math.random() - 0.5) * 360,
+    country: "Fake data",
+    count: 1 + Math.round(Math.random() * 100),
+  }));
 }
 
 function checkWebGL(): boolean {
@@ -100,11 +80,11 @@ export default function ActivityGlobe() {
     heatmapPointLat:    "lat",
     heatmapPointLng:    "lng",
     heatmapPointWeight: "count",
-    heatmapBandwidth:   5,
-    heatmapColorFn:     colorFn,
+    heatmapBandwidth:   0.9,
     heatmapBaseAltitude: 0,
-    heatmapTopAltitude: 0.3,
-    heatmapsTransitionDuration: 800,
+    heatmapTopAltitude: 0.7,
+    heatmapColorSaturation: 2.8,
+    heatmapsTransitionDuration: 3000,
   };
 
   return (
