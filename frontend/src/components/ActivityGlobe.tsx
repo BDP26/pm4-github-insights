@@ -71,11 +71,11 @@ export default function ActivityGlobe() {
     heatmapPointLat:    "lat",
     heatmapPointLng:    "lng",
     heatmapPointWeight: "count",
-    heatmapBandwidth:   1.35,
+    heatmapBandwidth:   5,
     heatmapColorFn:     colorFn,
-    heatmapColorSaturation: 3.2,
-    heatmapTopAltitude: 0.35,
-    heatmapsTransitionDuration: 1500,
+    heatmapBaseAltitude: 0,
+    heatmapTopAltitude: 0.3,
+    heatmapsTransitionDuration: 800,
   };
 
   return (
