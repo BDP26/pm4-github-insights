@@ -75,7 +75,10 @@ function toLabel(feature: NaturalEarthFeature): GlobeCityLabel | null {
 
 function loadCityLabels(): Promise<GlobeCityLabel[]> {
   // Fetch the full Natural Earth GeoJSON from the `public` folder at runtime.
-  return fetch("/natural-earth-cities.json")
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12_000);
+
+  return fetch("/natural-earth-cities.json", { signal: controller.signal })
     .then((res) => {
       if (!res.ok) throw new Error("failed to load city data");
       return res.json();
@@ -91,6 +94,9 @@ function loadCityLabels(): Promise<GlobeCityLabel[]> {
           return left.text.localeCompare(right.text);
         });
       return labels;
+    })
+    .finally(() => {
+      clearTimeout(timeoutId);
     });
 }
 

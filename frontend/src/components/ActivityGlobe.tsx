@@ -68,7 +68,7 @@ export default function ActivityGlobe() {
 
   useEffect(() => {
     if (!showCities) return;
-    if (cityLabels.length > 0 || cityLoading) return;
+    if (cityLabels.length > 0) return;
 
     let active = true;
 
@@ -79,18 +79,20 @@ export default function ActivityGlobe() {
       .then((labels) => {
         if (!active) return;
         setCityLabels(labels);
-        setCityLoading(false);
       })
       .catch(() => {
         if (!active) return;
         setCityError(true);
+      })
+      .finally(() => {
+        if (!active) return;
         setCityLoading(false);
       });
 
     return () => {
       active = false;
     };
-  }, [cityLabels.length, cityLoading, showCities]);
+  }, [cityLabels.length, showCities]);
 
   const heatmapLayer = [data];
 
