@@ -4,35 +4,6 @@
 
 ---
 
-## Daten aus Systemlauf
-
-### TODO-4 · §5.2 Throughput-Tabelle: Fehlende Werte
-
-Bereits eingetragen: Events total (21 748 215), Avg rate (10.7 ev/min).
-Noch ausstehend:
-
-| Zeile | Inhalt |
-|-------|--------|
-| Peak ingestion rate | ev/min — aus Grafana/Logs |
-| Median end-to-end latency | s — Poll → Dashboard-Update |
-| Kafka consumer lag (steady) | msgs — aus Kafka-UI |
-
----
-
-### TODO-7 · §5.5 Hidden Gem Cohort-Ergebnisse
-
-Tabelle (24 h / 168 h / 730 h): Snapshots evaluated, total flagged (≥1.5), sustained, dropped, precision.
-Aus `/api/hidden-gems/snapshots/{id}/cohort` lesbar oder direkt aus dem Frontend (Evaluation Reports View).
-
----
-
-### TODO-8 · §5.5 Top-5 Representative Detections
-
-Top-5 Repos nach sig\_score aus dem Live-Dashboard (Repository-Scope, höchster sig\_score über alle Fenster).
-Pro Repo: `full_name`, Sprache, sig\_score, stars/forks im Fenster, Einzeiler-Beschreibung.
-
----
-
 ## Personenabhängige TODOs
 
 | ID | Stelle | Inhalt |

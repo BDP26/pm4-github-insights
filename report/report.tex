@@ -10,6 +10,7 @@
 %% ── Extra packages not bundled with acmart ─────────────────────────────────
 \usepackage{tabularx}          % Flexible-width table columns
 \usepackage{float}             % [H] placement specifier
+\setlength{\emergencystretch}{4pt} % Allow slight extra word-spacing before hbox overflow
 \usepackage{mdframed}          % Framed TODO boxes (safer than tcolorbox with acmart)
 \usepackage{listings}          % Code snippets (optional)
 \usepackage{tikz}
@@ -61,6 +62,10 @@
 \acmDOI{}
 \acmConference[PM4 FS25]{Big Data Projects}{Spring 2025}{ZHAW, Winterthur, Switzerland}
 \acmISBN{}
+
+%% Suppress the ACM reference-format line — this is an internal ZHAW report,
+%% not an ACM conference submission.
+\settopmatter{printacmref=false}
 
 %% ============================================================
 \begin{document}
@@ -118,31 +123,6 @@ and a Next.js 16 dashboard for live trend visualisation. The entire stack is
 containerised and deployable with a single \texttt{docker compose} command.
 \TODO{Refine after report completion}
 \end{abstract}
-
-%% ── CCS Concepts ────────────────────────────────────────────────────────────
-%% Generate the correct terms at https://dl.acm.org/ccs/ccs.cfm
-\begin{CCSXML}
-<ccs2012>
-  <concept>
-    <concept_id>10002951.10002952.10002953.10010820.10003208</concept_id>
-    <concept_desc>Information systems~Data streams</concept_desc>
-    <concept_significance>500</concept_significance>
-  </concept>
-  <concept>
-    <concept_id>10002951.10002952.10002953.10010820</concept_id>
-    <concept_desc>Information systems~Database management system engines</concept_desc>
-    <concept_significance>300</concept_significance>
-  </concept>
-  <concept>
-    <concept_id>10011007.10011006.10011008.10011009.10011012</concept_id>
-    <concept_desc>Software and its engineering~Software architectures</concept_desc>
-    <concept_significance>100</concept_significance>
-  </concept>
-</ccs2012>
-\end{CCSXML}
-\ccsdesc[500]{Information systems~Data streams}
-\ccsdesc[300]{Information systems~Database management system engines}
-\ccsdesc[100]{Software and its engineering~Software architectures}
 
 %% ── Keywords ────────────────────────────────────────────────────────────────
 \keywords{stream processing, GitHub event API, Apache Kafka, TimescaleDB,
@@ -233,32 +213,20 @@ dataset~\cite{ghtorrent}. While GH Archive and GHTorrent provide valuable
 historical depth, neither system offers near-real-time ingestion or a
 pre-computed analytics layer.
 
-\textbf{Streaming architectures.}
-The Lambda architecture~\cite{marz2015big} proposes batch and speed layers
-running in parallel, with a serving layer merging their results. The Kappa
-architecture~\cite{kreps2014question} simplifies this by treating the batch layer
-as a special case of stream processing, using a single unified pipeline. Apache
-Kafka Streams and Apache Flink are representative frameworks that enable
-stateful stream processing with exactly-once semantics. These patterns are
-well-established in the literature on real-time analytics but have only
-recently been applied to open-source ecosystem monitoring.
-
-\textbf{Time-series databases.}
-TimescaleDB, InfluxDB, and ClickHouse are frequently compared for
-time-series workloads. Prior work on time-series database selection
-highlights TimescaleDB's advantage in hybrid workloads where SQL expressiveness
-and time-based compression are both required~\cite{timescaledb}. This motivates
-the storage choice in our pipeline.
-
 \textbf{Open-source trend detection.}
 GitHub's own Trending page surfaces repositories with the highest star velocity
 over a configurable time window, but it is limited to stars and does not expose
-the underlying event stream. Third-party services such as \textit{OSS Insight}
-and \textit{GitHub Star History} offer curated visualisations of repository
-popularity but are read-only analytical tools without ingest or enrichment
-capabilities. To our knowledge, no existing system combines continuous GitHub
-event ingestion, per-event geographic enrichment, and sub-minute latency
-visualisation in a single deployable pipeline.
+the underlying event stream or normalise velocity against a repository's history.
+Third-party services such as \textit{OSS Insight} and \textit{GitHub Star History}
+offer curated visualisations of repository popularity but are read-only analytical
+tools without ingest or enrichment capabilities. To our knowledge, no existing
+publicly documented system combines continuous GitHub event ingestion,
+per-event geographic enrichment, and sub-minute latency visualisation in a single
+deployable pipeline. Furthermore, all existing trend-detection tools rank
+repositories by raw star velocity; the Hidden Gem engine introduced in this work
+instead applies a Poisson significance test that normalises observed growth
+against each repository's historical baseline, enabling statistically grounded
+comparison across repositories of different ages and popularity levels.
 
 %% ── 3. System Architecture ──────────────────────────────────────────────────
 \section{System Architecture}
@@ -267,11 +235,12 @@ visualisation in a single deployable pipeline.
 \begin{figure*}[t]
   \centering
   \includegraphics[width=\textwidth]{diagrams/system-architecture}
-  \caption{End-to-end architecture of the GitHub Innovation Portal. Events
-    flow from the GitHub API through Kafka (KRaft) into TimescaleDB, where
-    they are served by FastAPI to the Next.js dashboard and Grafana.
-    Dashed arrows indicate authentication and auxiliary data flows.
-    See Appendix~\ref{appendix:arch-full} for the full annotated diagram.}
+  \caption{Simplified end-to-end architecture of the GitHub Innovation Portal.
+    Events flow from the GitHub API through Kafka (KRaft) into TimescaleDB,
+    where they are served by FastAPI to the Next.js dashboard and Grafana.
+    Dashed arrows indicate auxiliary data flows.
+    See Figure~\ref{fig:arch-full} in Appendix~\ref{appendix:arch-full} for
+    the full annotated diagram with all port numbers and data-flow labels.}
   \Description{Block diagram with seven grouped layers: External (GitHub API
     and token pool), Ingestion (Producer), Broker (Kafka and Kafka UI),
     Processing \& Enrichment (Consumer instances, DB Writer, Geocoder Client,
@@ -281,7 +250,7 @@ visualisation in a single deployable pipeline.
   \label{fig:architecture}
 \end{figure*}
 
-The architecture of the project consists of a real-time data streaming pipeline designed to ingest, enrich, and visualize GitHub events. It is built to efficiently manage GitHub API rate limits and ensure high scalability by decoupling individual components using a message broker.
+Figure~\ref{fig:architecture} shows the end-to-end architecture: a real-time data streaming pipeline designed to ingest, enrich, and visualise GitHub events. It is built to manage GitHub API rate limits efficiently and ensure high scalability by decoupling individual components through a message broker.
 
 \subsection{Data Ingestion (Producer)}
 The \textbf{Producer} (\texttt{producer/producer.py}) serves as the entry point of the pipeline:
@@ -298,7 +267,7 @@ The \textbf{Producer} (\texttt{producer/producer.py}) serves as the entry point 
     \item \textbf{Decoupling:} It separates the high-frequency data ingestion (Producer) from the more complex data enrichment steps (Consumer).
     \item \textbf{Durability:} Kafka serves as a reliable buffer; if a consumer fails, data is retained for 48 hours, allowing the system to resume where it left off.
     \item \textbf{Scalability:} The main topics are divided into three partitions, enabling parallel processing by multiple consumer instances.
-    \item \textbf{Topics:} Four topics carry distinct payload types: \texttt{github.events.raw} (raw event JSON), \texttt{github.events.status} (per-request enrichment status), \texttt{github.ratelimit} (rate-limit snapshots), and \texttt{geocoder.requests} (geocoder request logs, single partition).
+    \item \textbf{Topics:} Four topics partition the payload types: raw event JSON, enrichment status, rate-limit snapshots, and geocoder request logs (single partition).
 \end{itemize}
 
 \subsection{Processing and Enrichment (Consumer \& Geocoder)}
@@ -349,29 +318,31 @@ The system provides two complementary visualisation layers. \textbf{Grafana} ser
 To implement high-performance geographic enrichment of GitHub events without relying on external rate-limited services, \textbf{Photon} was integrated into the infrastructure.
 
 \begin{itemize}
-    \item \textbf{Local Instance:} Photon is an open-source geocoding service based on OpenStreetMap data. By operating it as a local Docker container, latency is minimized and the strict usage constraints of public APIs (such as Nominatim) are bypassed.
-    \item \textbf{Data Basis and Regions:} The service is initialized with specific datasets—for instance, covering regions like Africa—which are persisted in the \texttt{photon\_data} volume to ensure stability and speed.
+    \item \textbf{Local Instance:} Photon is an open-source geocoding service based on OpenStreetMap data. By operating it as a local Docker container, latency is minimized and the strict usage constraints of public APIs (such as Nominatim~\cite{nominatim}) are bypassed.
+    \item \textbf{Data Basis and Regions:} The service is initialised with a regional dataset—for instance, covering Africa—persisted in the \texttt{photon\_data} Docker volume to ensure stability and speed.
     \item \textbf{API Interface:} Photon provides a REST API that is queried by the \texttt{geocoder} service. It processes unstructured location strings from GitHub profiles and returns structured JSON data, including latitude, longitude, and ISO country codes.
     \item \textbf{Fault Tolerance:} The local instance's high performance allows for complex fuzzy search queries. This ensures that even if a location cannot be resolved immediately, the overall data flow of the pipeline is not delayed.
 \end{itemize}
 
-\begin{table}[h!]
-\centering
-\caption{Expanded System Component Overview (Docker Services)}
-\begin{tabular}{|l|p{10cm}|}
-\hline
-\textbf{Service} & \textbf{Function} \\ \hline
-\texttt{producer} & Polls the GitHub API and writes raw event data to Kafka. \\ \hline
-\texttt{kafka} & Central message broker used for service decoupling and buffering. \\ \hline
-\texttt{kafka-ui} & Web UI (port 8080) for Kafka topic inspection and consumer-lag monitoring. \\ \hline
-\texttt{kafka-init} & One-shot service that creates Kafka topics with the correct partition counts on first start. \\ \hline
-\texttt{consumer-\{0,1,2\}} & Three parallel instances that enrich events with user and repository metadata; each is pinned to one Kafka partition. \\ \hline
-\texttt{geocoder} & Logic layer that claims unlabelled user locations from the DB and resolves them via Photon. \\ \hline
-\texttt{photon} & Local geocoding engine (OpenStreetMap/Photon) that resolves location strings to coordinates. \\ \hline
-\texttt{db-writer} & Consumes status and rate limit topics to persist operational metrics. \\ \hline
-\texttt{timescaledb} & Time-series optimized SQL database used for data storage and aggregation. \\ \hline
-\texttt{grafana} & Operational monitoring dashboards for pipeline health and system metrics. \\ \hline
-\end{tabular}
+\begin{table}[h]
+  \caption{Docker Compose services and their roles}
+  \label{tab:services}
+  \begin{tabularx}{\linewidth}{l X}
+    \toprule
+    \textbf{Service} & \textbf{Function} \\
+    \midrule
+    \texttt{producer}           & Polls the GitHub API; writes raw events to Kafka. \\
+    \texttt{kafka}              & Central message broker for decoupling and buffering. \\
+    \texttt{kafka-ui}           & Web UI (port 8080) for topic inspection and lag monitoring. \\
+    \texttt{kafka-init}         & One-shot container that creates Kafka topics on first start. \\
+    \texttt{consumer-\{0,1,2\}} & Three parallel enrichment instances, each pinned to one Kafka partition. \\
+    \texttt{geocoder}           & Claims unlabelled user locations and resolves them via Photon. \\
+    \texttt{photon}             & Local OpenStreetMap geocoding engine; resolves location strings to coordinates. \\
+    \texttt{db-writer}          & Consumes status and rate-limit topics; persists operational metrics. \\
+    \texttt{timescaledb}        & Time-series optimised SQL database for event storage and aggregation. \\
+    \texttt{grafana}~\cite{grafana} & Analytics and monitoring dashboards for GitHub insights and pipeline health. \\
+    \bottomrule
+  \end{tabularx}
 \end{table}
 
 \subsection{Trending Repository Discovery}
@@ -382,13 +353,12 @@ of the enriched event data stored in TimescaleDB. It consumes the \texttt{events
 and \texttt{repos} tables produced by the consumer and geocoding services and
 exposes its results through the FastAPI layer and the Next.js frontend.
 
-The module comprises three components. First, a set of PostgreSQL aggregate
-functions (\texttt{hidden\_gem\_repo\_scores}, \texttt{hidden\_gem\_user\_scores},
-\texttt{hidden\_gem\_org\_scores}) compute per-entity significance scores on demand
-from the raw event tables. Second, a snapshot scheduler materialises these scores
-into persistent snapshot tables at configurable intervals (24\,h, 168\,h, 730\,h).
-Third, a dedicated FastAPI sub-router exposes filtered rankings, entity detail
-views, and cohort evaluation endpoints.
+The module comprises three components. First, a set of three PostgreSQL aggregate
+functions (one each for repositories, users, and organisations) compute per-entity
+significance scores on demand from the raw event tables. Second, a snapshot
+scheduler materialises these scores into persistent snapshot tables at configurable
+intervals (24\,h, 168\,h, 730\,h). Third, a dedicated FastAPI sub-router exposes
+filtered rankings, entity detail views, and cohort evaluation endpoints.
 
 This design keeps scoring logic entirely within the database tier, where
 TimescaleDB can leverage time-based indexing and column compression. No additional
@@ -574,28 +544,25 @@ rankings. The thresholds are configurable via environment variables.
 
 \subsubsection{User and Organisation Aggregation}
 
-Significance scores aggregate from repositories to users and organisations. For
-users, the aggregate function sums all repository scores within the window
-(\texttt{total\_score}), records the highest individual score
-(\texttt{best\_repo\_score}), and counts repositories that exceed the
-sig\_score\,$\geq 3.0$ boundary (\texttt{hidden\_gem\_count}). For organisations
-the aggregation produces two independent sub-totals: one for repositories directly
+Significance scores aggregate from repositories to users and organisations.
+For each user, three metrics are computed from the repositories active in the
+window: the total score sum, the highest single-repository score, and the count
+of repositories exceeding sig\_score\,$\geq 3.0$. For organisations the
+aggregation produces two independent sub-totals: one for repositories directly
 owned by the organisation, and one for repositories owned by registered members
-of the organisation (resolved via the \texttt{organization\_members} table). This
-split allows an organisation to assess its own output and the collective
-contribution of its member community independently.
+(resolved via the \texttt{organization\_members} table). This split allows an
+organisation to assess its own output and the collective contribution of its
+member community independently.
 
 \subsubsection{Snapshot Scheduler}
 
 Because the aggregate queries scan the full \texttt{events} table, results are
 materialised at fixed intervals by the snapshot scheduler
-(\texttt{api/scheduler/snapshot\_scheduler.py}), implemented with APScheduler.
+(\texttt{snapshot\_scheduler.py}), implemented with APScheduler.
 Three intervals are configured: 24\,h, 168\,h, and 730\,h. On each run the
 scheduler inserts a metadata record into \texttt{hidden\_gem\_snapshot\_runs},
-fetches fresh scores from all three aggregate functions, bulk-inserts results
-into the corresponding snapshot tables (\texttt{hidden\_gem\_snapshot\_repos},
-\texttt{hidden\_gem\_snapshot\_users}, \texttt{hidden\_gem\_snapshot\_orgs}), and
-updates the run record with per-entity counts. Transient database errors trigger
+fetches fresh scores from all three aggregate functions, bulk-inserts results into
+three per-entity snapshot tables, and updates the run record with entity counts. Transient database errors trigger
 exponential back-off with a timeout scaled linearly by attempt number. Stored
 snapshots serve two purposes: they supply the score history data consumed by the
 frontend detail pages, and they enable the cohort evaluation described in
@@ -699,7 +666,7 @@ Table~\ref{tab:coverage} shows the breadth of the data collected.
     Unique contributors            & 3{,}963{,}190 \\
     Countries represented          & 217 \\
     Geocoding success rate         & 98.0\% \\
-    Event types observed           & \texttt{CommitCommentEvent}, \texttt{CreateEvent}, \texttt{DeleteEvent}, \texttt{DiscussionEvent}, \texttt{ForkEvent}, \texttt{GollumEvent}, \texttt{IssueCommentEvent}, \texttt{IssuesEvent}, \texttt{MemberEvent}, \texttt{PublicEvent}, \texttt{PullRequestEvent}, \texttt{PullRequestReviewCommentEvent}, \texttt{PullRequestReviewEvent}, \texttt{PushEvent}, \texttt{ReleaseEvent}, \texttt{WatchEvent} (16 types) \\
+    Event types observed           & {\footnotesize\texttt{CommitCommentEvent}, \texttt{CreateEvent}, \texttt{DeleteEvent}, \texttt{DiscussionEvent}, \texttt{ForkEvent}, \texttt{GollumEvent}, \texttt{IssueCommentEvent}, \texttt{IssuesEvent}, \texttt{MemberEvent}, \texttt{PublicEvent}, \texttt{PullRequestEvent}, \texttt{PullRequestReviewCommentEvent}, \texttt{PullRequestReviewEvent}, \texttt{PushEvent}, \texttt{ReleaseEvent}, \texttt{WatchEvent}} (16 types) \\
     Most active programming lang.  & HTML (824{,}115 repos) \\
     \bottomrule
   \end{tabularx}
@@ -769,55 +736,89 @@ indicate transient activity spikes.
   \end{tabularx}
 \end{table}
 
-\subsubsection{Representative Detections}
+\subsubsection{Sustained Momentum Detections}
 
-Table~\ref{tab:top5} lists the five repositories with the highest significance
-scores recorded across all snapshot runs. All five reached the score ceiling
-of~10, indicating a Poisson survival probability of
-$\mathrm{SF} \leq e^{-34.5} \approx 10^{-15}$ — far below the primary
-classification threshold. The score ceiling is reached by a notable fraction of
-detected repositories, meaning rank within the top tier must be broken by
-secondary criteria such as absolute star counts or window length.
+Because the sig\_score ceiling of~10 is reached by 3--6\% of scored
+repositories per window (Table~\ref{tab:scoredist}), peak score alone is a
+poor discriminator within the top tier. A more informative measure of genuine
+discovery quality is \emph{temporal consistency}: how many independent calendar
+days did the algorithm flag a repository as statistically significant
+(sig\_score\,$\geq 3.0$)?
+
+To compute this, we replayed the Poisson scoring model day-by-day across the
+full event history, using the same $\lambda$ formula and the same
+\texttt{F\_poisson\_sf()} function as the live engine, with
+S\textsubscript{base} reconstructed as the sum of pre-collection stars (current
+GitHub total minus our observed total) and the running tally of stars observed
+before each target day. Table~\ref{tab:sustained} lists the five repositories
+that the algorithm flagged on the most distinct days with sig\_score\,$\geq 3.0$.
 
 \begin{table*}[tp]
-  \caption{Top-5 repositories by peak significance score over the evaluation
-    period ($\Delta\!\star$ = stars accrued in window;
-    $\Delta\!\pitchfork$ = forks accrued in window).
-    All five saturate the sig\_score ceiling of~10.}
-  \label{tab:top5}
+  \caption{Top-5 repositories by number of calendar days with
+    sig\_score\,$\geq 3.0$ over the full evaluation period, computed by
+    replaying the Poisson scoring model on the raw event history.
+    \emph{Avg.\ score} is the mean over significant days only.
+    \texttt{addyosmani/agent-skills} was still being flagged on the last day
+    of the collection period (2026-05-09), indicating ongoing momentum.}
+  \label{tab:sustained}
   \small
-  \begin{tabularx}{\textwidth}{l l r r r r X}
+  \begin{tabularx}{\textwidth}{l l r r l X}
     \toprule
-    \textbf{Repository} & \textbf{Lang.} & \textbf{Score}
-      & $\Delta\!\star$ & $\Delta\!\pitchfork$ & \textbf{Window}
-      & \textbf{Description} \\
+    \textbf{Repository} & \textbf{Lang.}
+      & \textbf{Days} & \textbf{Avg.\ score}
+      & \textbf{Active period} & \textbf{Description} \\
     \midrule
-    \texttt{Sunefei/PatchNet}
-      & Python & 10 &  13 &  1 & 168\,h
-      & \TODO{Verify from GitHub repo page} \\
-    \texttt{warpdotdev/Warp}
-      & — & 10 & 211 & 26 & 168\,h
-      & AI-powered terminal emulator with collaborative and IDE-like features \\
-    \texttt{Anil-matcha/Open-Higgsfield-AI}
-      & JavaScript & 10 & 204 & 28 & 730\,h
-      & Open-source web interface for the Higgsfield AI cinematic video generation model \\
-    \texttt{capcom6/android-sms-gateway}
-      & Kotlin & 10 &  89 &  9 & 730\,h
-      & Self-hosted REST API gateway for sending and receiving SMS via an Android device \\
+    \texttt{forrestchang/andrej-karpathy-skills}
+      & — & 9 & 6.04 & Apr~12–26
+      & Community-maintained guide to technical skills and learning resources
+        inspired by AI researcher Andrej Karpathy \\
+    \texttt{NousResearch/hermes-agent}
+      & Python & 8 & 8.81 & Apr~8–18
+      & Agentic AI framework from NousResearch, companion to the Hermes
+        large-language-model family \\
     \texttt{Fincept-Corporation/FinceptTerminal}
-      & Python & 10 & 355 & 43 & 730\,h
-      & Terminal-based financial analytics platform for real-time market data and portfolio tracking \\
+      & Python & 8 & 7.98 & Apr~18–27
+      & Terminal-based financial analytics platform for real-time market data
+        and portfolio tracking \\
+    \texttt{addyosmani/agent-skills}
+      & Shell & 7 & 9.70 & Apr~25–May~9
+      & Curated collection of reusable AI agent skill definitions for agentic
+        coding workflows, by Addy Osmani (Google) \\
+    \texttt{multica-ai/multica}
+      & TypeScript & 6 & 7.99 & Apr~9–18
+      & Multi-agent AI orchestration and coordination platform \\
     \bottomrule
   \end{tabularx}
 \end{table*}
 
 \subsubsection{Score Distribution Across Snapshots}
 
-\TODO{Report the distribution of sig\_score values across all stored snapshot
-runs, broken down by time window (24\,h, 168\,h, 730\,h). Report: number of
-scored repositories, mean, median, 90th-percentile sig\_score, fraction with
-sig\_score\,$\geq 3.0$, and fraction with sig\_score\,$\geq 1.5$. Values can be
-obtained by querying the \texttt{hidden\_gem\_snapshot\_repos} table directly.}
+Table~\ref{tab:scoredist} summarises the sig\_score distribution across all
+stored snapshot runs per time window. The distribution is heavily right-skewed:
+the median is 0.00 in every window, indicating that more than half of all
+scored repositories show no statistically significant activity above the null
+model. Fewer than 10\% of scored repositories in any window qualify as hidden
+gems (sig\_score\,$\geq 3.0$); 3--6\% reach the score ceiling of~10, which
+corresponds to $P(X \geq k) \leq e^{-34.5} \approx 10^{-15}$. At the absolute
+counts this implies several hundred ceiling-scoring repositories in the 730\,h
+window (approximately 6.4\% of 9{,}113 scored entries), which motivates the
+sustained-trend selection criterion used in Section~\ref{sec:eval-hg}.
+
+\begin{table}[h]
+  \caption{sig\_score distribution across all snapshot runs, by time window.
+    Scored = repositories with a non-null score in at least one run.}
+  \label{tab:scoredist}
+  \begin{tabularx}{\linewidth}{r r r r r r r}
+    \toprule
+    \textbf{Win.} & \textbf{Scored} & \textbf{Mean} & \textbf{Med.}
+      & \textbf{p90} & ${\geq}3.0$ & $=10$ \\
+    \midrule
+    24\,h  &     557 & 0.71 & 0.00 & 2.09 &  8.8\% & 3.1\% \\
+    168\,h &  5{,}352 & 0.59 & 0.00 & 1.13 &  7.0\% & 2.8\% \\
+    730\,h &  9{,}113 & 0.89 & 0.00 & 2.39 &  9.5\% & 6.4\% \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
 
 %% ── 6. Technology Decision Rationale ────────────────────────────────────────
 \section{Technology Decision Rationale}

@@ -12,50 +12,44 @@ Reallocated glb_str_ptr (elt_size=4) to 20 items from 10.
 Reallocated global_strs (elt_size=200001) to 20 items from 10.
 Reallocated glb_str_end (elt_size=4) to 20 items from 10.
 Reallocated singl_function (elt_size=4) to 100 items from 50.
-Warning--no number and no volume in kreps2014question
-Warning--page numbers missing in both pages and numpages fields in kreps2014question
-Warning--empty publisher in marz2015big
-Warning--empty address in marz2015big
-Warning--page numbers missing in both pages and numpages fields in marz2015big
 You've used 11 entries,
             6273 wiz_defined-function locations,
-            1571 strings with 19489 characters,
-and the built_in function-call counts, 8991 in all, are:
-= -- 1118
-> -- 215
+            1569 strings with 19401 characters,
+and the built_in function-call counts, 8498 in all, are:
+= -- 1033
+> -- 201
 < -- 0
-+ -- 62
-- -- 91
-* -- 487
-:= -- 923
-add.period$ -- 63
++ -- 55
+- -- 84
+* -- 450
+:= -- 901
+add.period$ -- 65
 call.type$ -- 11
-change.case$ -- 56
+change.case$ -- 55
 chr.to.int$ -- 11
-cite$ -- 16
-duplicate$ -- 844
-empty$ -- 604
-format.name$ -- 95
-if$ -- 2076
+cite$ -- 11
+duplicate$ -- 795
+empty$ -- 569
+format.name$ -- 84
+if$ -- 1902
 int.to.chr$ -- 2
 int.to.str$ -- 1
-missing$ -- 13
-newline$ -- 143
+missing$ -- 4
+newline$ -- 147
 num.names$ -- 77
-pop$ -- 285
+pop$ -- 234
 preamble$ -- 1
-purify$ -- 144
+purify$ -- 143
 quote$ -- 0
-skip$ -- 326
+skip$ -- 323
 stack$ -- 0
-substring$ -- 637
-swap$ -- 49
+substring$ -- 638
+swap$ -- 48
 text.length$ -- 0
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 302
-warning$ -- 5
+type$ -- 316
+warning$ -- 0
 while$ -- 80
 width$ -- 0
-write$ -- 254
-(There were 5 warnings)
+write$ -- 257

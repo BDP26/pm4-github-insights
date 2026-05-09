@@ -70,6 +70,18 @@
 \shownote{Accessed: March 2025}.
 
 
+\bibitem[{Grafana Labs}(2025)]%
+        {grafana}
+\bibfield{author}{\bibinfo{person}{{Grafana Labs}}.}
+  \bibinfo{year}{2025}\natexlab{}.
+\newblock \bibinfo{title}{{Grafana} Documentation}.
+\newblock
+  \bibinfo{howpublished}{\url{https://grafana.com/docs/grafana/latest/}}.
+\newblock
+\newblock
+\shownote{Accessed: March 2025}.
+
+
 \bibitem[Grigorik(2012)]%
         {gharchive}
 \bibfield{author}{\bibinfo{person}{Ilya Grigorik}.}
@@ -94,17 +106,6 @@
 \shownote{W3C Recommendation, 3 February 2015}.
 
 
-\bibitem[Kreps(2014)]%
-        {kreps2014question}
-\bibfield{author}{\bibinfo{person}{Jay Kreps}.}
-  \bibinfo{year}{2014}\natexlab{}.
-\newblock \showarticletitle{Question: Why is a kappa architecture sometimes
-  considered better than lambda architecture}.
-\newblock \bibinfo{howpublished}{\url{https://oreil.ly/kappa-architecture}}.
-\newblock \bibinfo{journal}{\emph{O'Reilly Blog}} (\bibinfo{year}{2014}).
-\newblock
-
-
 \bibitem[Lamarque et~al\mbox{.}(2022)]%
         {lamarque2022github}
 \bibfield{author}{\bibinfo{person}{Filipe Lamarque} {et~al\mbox{.}}}
@@ -117,13 +118,16 @@
 \newblock
 
 
-\bibitem[Marz and Warren(2015)]%
-        {marz2015big}
-\bibfield{author}{\bibinfo{person}{Nathan Marz} {and} \bibinfo{person}{James
-  Warren}.} \bibinfo{year}{2015}\natexlab{}.
-\newblock \showarticletitle{Big Data: Principles and best practices of scalable
-  real-time data systems}. In \bibinfo{booktitle}{\emph{Manning Publications}}.
+\bibitem[{OpenStreetMap contributors}(2025)]%
+        {nominatim}
+\bibfield{author}{\bibinfo{person}{{OpenStreetMap contributors}}.}
+  \bibinfo{year}{2025}\natexlab{}.
+\newblock \bibinfo{title}{Nominatim Search {API} Documentation}.
 \newblock
+  \bibinfo{howpublished}{\url{https://nominatim.org/release-docs/latest/api/Search/}}.
+\newblock
+\newblock
+\shownote{Accessed: March 2025}.
 
 
 \bibitem[Ram\'irez(2025)]%
