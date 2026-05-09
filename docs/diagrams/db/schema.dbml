@@ -1,0 +1,272 @@
+// ═══════════════════════════════════════════════════════════════════
+//  GitHub Events — TimescaleDB Star Schema
+//  Compatible with dbdiagram.io — paste at https://dbdiagram.io/d
+// ═══════════════════════════════════════════════════════════════════
+
+//// ── CORE: Star Schema ─────────────────────────────────────────────
+
+Table users [note: 'Dimension: GitHub users, enriched with geo data'] {
+  username        text        [pk, note: 'GitHub login handle']
+  fetched_at      timestamptz
+  company         text
+  location        text
+  country         text
+  country_code    char(2)
+  lat             float
+  lng             float
+  public_repos    integer
+  followers       integer
+  last_active     timestamptz
+  is_bot          boolean     [not null, default: false]
+  geo_claimed_at  timestamptz [note: 'Optimistic lock for geocoder deduplication']
+}
+
+Table organizations [note: 'Dimension: GitHub organizations'] {
+  login           text        [pk]
+  fetched_at      timestamptz
+  name            text
+  description     text
+  location        text
+  lat             float
+  lng             float
+  is_verified     boolean     [default: false]
+  public_repos    integer
+  created_at      timestamptz
+  geo_claimed_at  timestamptz [note: 'Optimistic lock for geocoder deduplication']
+}
+
+Table organization_members [note: 'Junction: org ↔ user membership'] {
+  org_login       text [not null]
+  user_username   text [not null]
+  role            text
+
+  indexes {
+    (org_login, user_username) [pk]
+  }
+}
+
+Table repos [note: 'Dimension: GitHub repositories'] {
+  repo_id             integer     [pk]
+  fetched_at          timestamptz
+  name                text        [not null]
+  full_name           text        [not null]
+  owner_login         text        [not null, note: 'User or Org login (polymorphic)']
+  owner_type          text        [note: '"User" or "Organization"']
+  description         text
+  language            text
+  license_spdx        text
+  topics              "text[]"
+  stargazers_count    integer     [default: 0]
+  forks_count         integer     [default: 0]
+  watchers_count      integer     [default: 0]
+  has_issues          boolean
+  open_issues_count   integer
+  has_projects        boolean
+  has_downloads       boolean
+  archived            boolean
+  disabled            boolean
+  homepage            text
+  size                integer
+  created_at          timestamptz
+  pushed_at           timestamptz
+}
+
+Table events [note: 'Fact: GitHub events — TimescaleDB hypertable (1-day chunks, 90-day retention, compressed after 7 days)'] {
+  time            timestamptz [not null]
+  event_id        text        [not null]
+  event_type      text        [not null]
+  actor_username  text        [not null]
+  repo_id         integer     [not null]
+  detail          text
+  payload         jsonb
+
+  indexes {
+    (time, event_id) [pk]
+    (actor_username, time) [name: 'idx_events_actor']
+    (repo_id, time)        [name: 'idx_events_repo']
+    (time, repo_id, detail) [name: 'idx_events_time_repo']
+  }
+}
+
+//// ── OPERATIONAL: Logging & Rate Limits ───────────────────────────
+
+Table request_logs [note: 'Operational: GitHub API request logs (REST + GraphQL batching)'] {
+  id               serial      [pk, increment]
+  request_success  boolean
+  sent_at          timestamptz
+  received_at      timestamptz
+  elapsed_s        float
+  method           text
+  url              text
+  status_code      integer
+  reason           text
+  response_bytes   integer
+  redirects        integer
+  final_url        text
+  http_version     integer
+  encoding         text
+  request_headers  jsonb
+  response_headers jsonb
+  error            text
+  request_type     text        [default: 'rest', note: '"rest" or "graphql"']
+  batch_size       integer
+  token_id         text
+}
+
+Table rate_limit_snapshots [note: 'Operational: GitHub API rate-limit snapshots — hypertable'] {
+  id           serial      [increment]
+  recorded_at  timestamptz [not null]
+  source       text        [not null, note: '"producer" or "consumer"']
+  resource     text        [note: '"core", "search", etc.']
+  limit_       integer
+  used         integer
+  remaining    integer
+  reset_at     timestamptz
+  token_id     text
+
+  indexes {
+    (recorded_at) [pk]
+    (recorded_at)        [name: 'idx_ratelimit_recorded']
+    (source, recorded_at) [name: 'idx_ratelimit_source']
+  }
+}
+
+Table geocoder_request_logs [note: 'Operational: Photon/Nominatim geocoder request logs — hypertable'] {
+  recorded_at      timestamptz [not null]
+  id               bigserial   [not null, increment]
+  request_success  boolean     [not null]
+  sent_at          timestamptz [not null]
+  received_at      timestamptz
+  elapsed_s        float
+  method           text
+  url              text
+  location_query   text        [note: 'Raw location string submitted to geocoder']
+  status_code      integer
+  reason           text
+  response_bytes   integer
+  redirects        integer
+  final_url        text
+  http_version     integer
+  encoding         text
+  request_headers  jsonb
+  response_headers jsonb
+  error            text
+
+  indexes {
+    (recorded_at, id) [pk]
+    (recorded_at)               [name: 'idx_geocoder_recorded']
+    (request_success, recorded_at) [name: 'idx_geocoder_success']
+    (location_query, recorded_at)  [name: 'idx_geocoder_location']
+  }
+}
+
+//// ── HIDDEN GEM SNAPSHOTS ─────────────────────────────────────────
+
+Table hidden_gem_snapshot_runs [note: 'Snapshot header: one row per scheduled hidden-gem scoring run'] {
+  id              serial      [pk, increment]
+  run_at          timestamptz [not null]
+  interval_hours  integer     [not null, note: 'Scoring window in hours, must be > 0']
+  alpha           float       [not null, default: 1.0, note: 'Star weight in λ = (α·stars + β·forks) / age']
+  beta            float       [not null, default: 1.0, note: 'Fork weight in λ formula']
+  repo_count      integer
+  user_count      integer
+  org_count       integer
+
+  indexes {
+    (interval_hours, run_at) [name: 'idx_snapshot_runs_interval']
+  }
+}
+
+Table hidden_gem_snapshot_repos [note: 'Snapshot: per-repo Poisson significance scores for a run'] {
+  snapshot_id          integer [not null]
+  repo_id              integer [not null]
+  full_name            text    [not null]
+  name                 text
+  owner_login          text
+  language             text
+  license_spdx         text
+  topics               "text[]"
+  sig_score            float   [note: 'Significance score: −ln(SF) / 34.5 × 10, capped at 10']
+  rank                 integer
+  count_stars_interval integer
+  count_forks_interval integer
+  total_stars          integer
+  total_forks          integer
+
+  indexes {
+    (snapshot_id, repo_id)  [pk]
+    (full_name, snapshot_id) [name: 'idx_snapshot_repos_fullname']
+  }
+}
+
+Table hidden_gem_snapshot_users [note: 'Snapshot: per-user aggregated hidden-gem scores for a run'] {
+  snapshot_id            integer [not null]
+  username               text    [not null]
+  total_score            float
+  best_repo_score        float
+  best_repo              text
+  hidden_gem_count       integer [note: 'Repos with sig_score ≥ 3 (~95% significance)']
+  active_repos_in_window integer
+
+  indexes {
+    (snapshot_id, username) [pk]
+    (username, snapshot_id)  [name: 'idx_snapshot_users_username']
+  }
+}
+
+Table hidden_gem_snapshot_orgs [note: 'Snapshot: per-org scores, split into org-owned vs member-owned repos'] {
+  snapshot_id                integer [not null]
+  org_login                  text    [not null]
+  org_repos_total_score      float
+  org_repos_best_score       float
+  org_active_repos           integer
+  org_hidden_gem_count       integer
+  member_repos_total_score   float
+  member_repos_best_score    float
+  member_active_repos        integer
+  member_active_users        integer
+  member_hidden_gem_count    integer
+
+  indexes {
+    (snapshot_id, org_login) [pk]
+    (org_login, snapshot_id)  [name: 'idx_snapshot_orgs_login']
+  }
+}
+
+//// ── REFERENCES ────────────────────────────────────────────────────
+
+// Core star schema
+Ref: events.actor_username  > users.username
+Ref: events.repo_id         > repos.repo_id
+
+// Org membership junction
+Ref: organization_members.org_login      > organizations.login
+Ref: organization_members.user_username  > users.username
+
+// Hidden gem snapshot children → run header
+Ref: hidden_gem_snapshot_repos.snapshot_id  > hidden_gem_snapshot_runs.id
+Ref: hidden_gem_snapshot_users.snapshot_id  > hidden_gem_snapshot_runs.id
+Ref: hidden_gem_snapshot_orgs.snapshot_id   > hidden_gem_snapshot_runs.id
+
+//// ── TABLE GROUPS ──────────────────────────────────────────────────
+
+TableGroup "Core (Star Schema)" {
+  users
+  organizations
+  organization_members
+  repos
+  events
+}
+
+TableGroup "Operational" {
+  request_logs
+  rate_limit_snapshots
+  geocoder_request_logs
+}
+
+TableGroup "Hidden Gem Snapshots" {
+  hidden_gem_snapshot_runs
+  hidden_gem_snapshot_repos
+  hidden_gem_snapshot_users
+  hidden_gem_snapshot_orgs
+}

@@ -1,0 +1,224 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="arch-diagram" name="System Architecture">
+    <mxGraphModel dx="808" dy="435" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2200" pageHeight="850" math="0" shadow="1">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="g_docker" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#ECEFF1;strokeColor=#90A4AE;strokeWidth=2;dashed=1;dashPattern=8 4;                  verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;                  fontSize=12;fontColor=#546E7A;fontStyle=1;arcSize=3;" value="" vertex="1">
+          <mxGeometry height="541" width="1928" x="242" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="e_tok_prod" edge="1" parent="1" source="n_tokens" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  orthogonalLoop=1;jettySize=auto;                  dashed=1;dashPattern=6 3;strokeColor=#9E9E9E;                  exitX=1;exitY=0;exitDx=0;exitDy=0;                  entryX=0.2;                  fontSize=9;fontColor=#777777;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;" value="events auth">
+          <mxGeometry relative="1" x="0.5929" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="353" y="459" />
+            </Array>
+            <mxPoint x="353" y="327" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="g_ext" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#E8EAF6;strokeColor=#5C6BC0;strokeWidth=2;dashed=1;                  verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;                  fontSize=10;fontColor=#283593;fontStyle=1;arcSize=5;" value="" vertex="1">
+          <mxGeometry height="248" width="161" x="20" y="291" as="geometry" />
+        </mxCell>
+        <mxCell id="g_ing" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#E1F5FE;strokeColor=#0288D1;strokeWidth=2;dashed=1;                  verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;                  fontSize=10;fontColor=#01579B;fontStyle=1;arcSize=5;" value="" vertex="1">
+          <mxGeometry height="140" width="183" x="267" y="211" as="geometry" />
+        </mxCell>
+        <mxCell id="g_brk" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#FFF3E0;strokeColor=#EF6C00;strokeWidth=2;dashed=1;                  verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;                  fontSize=10;fontColor=#BF360C;fontStyle=1;arcSize=5;" value="" vertex="1">
+          <mxGeometry height="255" width="175" x="624" y="207" as="geometry" />
+        </mxCell>
+        <mxCell id="g_prc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#E8F5E9;strokeColor=#2E7D32;strokeWidth=2;dashed=1;                  verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;                  fontSize=10;fontColor=#1B5E20;fontStyle=1;arcSize=5;" value="" vertex="1">
+          <mxGeometry height="488" width="168" x="942" y="146" as="geometry" />
+        </mxCell>
+        <mxCell id="g_sto" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#F3E5F5;strokeColor=#6A1B9A;strokeWidth=2;dashed=1;                  verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;                  fontSize=10;fontColor=#4A148C;fontStyle=1;arcSize=5;" value="" vertex="1">
+          <mxGeometry height="220" width="186" x="1260" y="237" as="geometry" />
+        </mxCell>
+        <mxCell id="g_api" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#FFFDE7;strokeColor=#F9A825;strokeWidth=2;dashed=1;                  verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;                  fontSize=10;fontColor=#E65100;fontStyle=1;arcSize=5;" value="" vertex="1">
+          <mxGeometry height="140" width="164" x="1539" y="226" as="geometry" />
+        </mxCell>
+        <mxCell id="g_viz" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#FCE4EC;strokeColor=#AD1457;strokeWidth=2;dashed=1;                  verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;                  fontSize=10;fontColor=#880E4F;fontStyle=1;arcSize=5;" value="" vertex="1">
+          <mxGeometry height="300" width="173" x="1781" y="184.5" as="geometry" />
+        </mxCell>
+        <mxCell id="n_github" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#C5CAE9;strokeColor=#3F51B5;strokeWidth=2;                  fontSize=11;fontColor=#1a237e;arcSize=8;" value="&lt;b&gt;GitHub API&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;api.github.com/events&lt;br/&gt;Public Events Feed&lt;/font&gt;" vertex="1">
+          <mxGeometry height="76" width="130" x="35" y="333" as="geometry" />
+        </mxCell>
+        <mxCell id="vN95nQtFUNBw46MyjZKw-1" edge="1" parent="1" source="n_tokens" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="n_github" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="n_tokens" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#C5CAE9;strokeColor=#3F51B5;strokeWidth=2;                  fontSize=11;fontColor=#1a237e;arcSize=8;" value="&lt;b&gt;Token Pool&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;3 GitHub PAT tokens&lt;br/&gt;5 000 req/h each&lt;/font&gt;" vertex="1">
+          <mxGeometry height="76" width="130" x="35" y="446" as="geometry" />
+        </mxCell>
+        <mxCell id="n_prod" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#81D4FA;strokeColor=#0277BD;strokeWidth=2;                  fontSize=11;fontColor=#01234a;arcSize=8;" value="&lt;b&gt;Producer&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Python service&lt;br/&gt;10 s poll · ETag dedup&lt;/font&gt;" vertex="1">
+          <mxGeometry height="82" width="125" x="293" y="244" as="geometry" />
+        </mxCell>
+        <mxCell id="n_kafka" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#FFCC80;strokeColor=#EF6C00;strokeWidth=2;                  fontSize=11;fontColor=#3e2723;arcSize=8;" value="&lt;b&gt;Kafka KRaft&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;1 broker · 3 partitions&lt;br/&gt;48 h retention · Snappy&lt;/font&gt;" vertex="1">
+          <mxGeometry height="80" width="130" x="651" y="241" as="geometry" />
+        </mxCell>
+        <mxCell id="n_kui" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#FFCC80;strokeColor=#EF6C00;strokeWidth=2;                  fontSize=11;fontColor=#3e2723;arcSize=8;" value="&lt;b&gt;Kafka UI&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Port 8080&lt;br/&gt;Topic browser &amp;amp; metrics&lt;/font&gt;" vertex="1">
+          <mxGeometry height="76" width="131" x="650" y="363" as="geometry" />
+        </mxCell>
+        <mxCell id="n_cons" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#A5D6A7;strokeColor=#2E7D32;strokeWidth=2;                  fontSize=11;fontColor=#1b3a1c;arcSize=8;" value="&lt;b&gt;Consumer(s)&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;1–3 instances · pinned partitions&lt;br/&gt;GraphQL batch 20 · token pool&lt;/font&gt;" vertex="1">
+          <mxGeometry height="82" width="145" x="957" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="n_dbw" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#A5D6A7;strokeColor=#2E7D32;strokeWidth=2;                  fontSize=11;fontColor=#1b3a1c;arcSize=8;" value="&lt;b&gt;DB Writer&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Operational log writer&lt;br/&gt;request logs · ratelimit snapshots&lt;/font&gt;" vertex="1">
+          <mxGeometry height="76" width="142" x="960" y="308" as="geometry" />
+        </mxCell>
+        <mxCell id="n_geo" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#A5D6A7;strokeColor=#2E7D32;strokeWidth=2;                  fontSize=11;fontColor=#1b3a1c;arcSize=8;" value="&lt;b&gt;Geocoder Client&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Python · 1 req/s&lt;br/&gt;Location → lat/lng/country&lt;/font&gt;" vertex="1">
+          <mxGeometry height="76" width="141" x="961" y="428" as="geometry" />
+        </mxCell>
+        <mxCell id="n_pho" parent="1" style="rounded=1;arcSize=40;whiteSpace=wrap;html=1;                  fillColor=#A5D6A7;strokeColor=#2E7D32;strokeWidth=2;                  fontSize=11;fontColor=#1b3a1c;" value="&lt;b&gt;Photon&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;OpenStreetMap geocoder&lt;br/&gt;Port 2322&lt;/font&gt;" vertex="1">
+          <mxGeometry height="76" width="144" x="958" y="544" as="geometry" />
+        </mxCell>
+        <mxCell id="n_tsb" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;                  boundedLbl=1;backgroundOutline=1;size=14;                  fillColor=#CE93D8;strokeColor=#6A1B9A;strokeWidth=2;                  fontSize=11;fontColor=#1a0030;fontStyle=1;" value="&lt;b&gt;TimescaleDB&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;PostgreSQL 16 · Port 5432&lt;br/&gt;hypertables · cont. aggs&lt;br/&gt;90 d retention&lt;/font&gt;" vertex="1">
+          <mxGeometry height="140" width="142" x="1284" y="275" as="geometry" />
+        </mxCell>
+        <mxCell id="n_fast" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#FFF176;strokeColor=#F57F17;strokeWidth=2;                  fontSize=11;fontColor=#33291a;arcSize=8;" value="&lt;b&gt;FastAPI&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Port 8000 · REST + SSE&lt;br/&gt;APScheduler · Hidden Gems&lt;/font&gt;" vertex="1">
+          <mxGeometry height="80" width="128" x="1557" y="266" as="geometry" />
+        </mxCell>
+        <mxCell id="n_next" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#F48FB1;strokeColor=#AD1457;strokeWidth=2;                  fontSize=11;fontColor=#1a0010;arcSize=8;" value="&lt;b&gt;Next.js Frontend&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Port 3000 · React · Tremor&lt;br/&gt;Globe GL · Tailwind&lt;/font&gt;" vertex="1">
+          <mxGeometry height="80" width="130" x="1802" y="211" as="geometry" />
+        </mxCell>
+        <mxCell id="n_graf" parent="1" style="rounded=1;whiteSpace=wrap;html=1;                  fillColor=#F48FB1;strokeColor=#AD1457;strokeWidth=2;                  fontSize=11;fontColor=#1a0010;arcSize=8;" value="&lt;b&gt;Grafana&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Port 3001 · 7 dashboards&lt;br/&gt;Read-only SQL role&lt;/font&gt;" vertex="1">
+          <mxGeometry height="80" width="130" x="1806" y="372.5" as="geometry" />
+        </mxCell>
+        <mxCell id="n_user" parent="1" style="ellipse;whiteSpace=wrap;html=1;                  fillColor=#C5CAE9;strokeColor=#3F51B5;strokeWidth=2;                  fontSize=11;fontColor=#1a237e;" value="&lt;b&gt;End User&lt;/b&gt;&lt;br/&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;Browser&lt;/font&gt;" vertex="1">
+          <mxGeometry height="76" width="84" x="2069" y="372.5" as="geometry" />
+        </mxCell>
+        <mxCell id="e_gh_prod" edge="1" parent="1" source="n_github" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  orthogonalLoop=1;jettySize=auto;                  exitX=1;exitY=0.5;exitDx=0;exitDy=0;                  entryX=0;                  fontSize=9;fontColor=#333333;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;" value="HTTP GET /events">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="353" y="371" />
+              <mxPoint x="353" y="327" />
+            </Array>
+            <mxPoint x="353" y="327" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_tok_cons" edge="1" parent="1" source="n_tokens" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  orthogonalLoop=1;jettySize=auto;                  dashed=1;dashPattern=6 3;strokeColor=#9E9E9E;                  exitX=1;                  entryX=0.2;                  fontSize=9;fontColor=#777777;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;exitX=1;exitY=0.75;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;" target="n_cons" value="GraphQL auth">
+          <mxGeometry relative="1" x="-0.3066" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="165" y="499" />
+              <mxPoint x="845" y="499" />
+              <mxPoint x="845" y="242" />
+            </Array>
+            <mxPoint x="541" y="477" as="sourcePoint" />
+            <mxPoint x="941" y="327" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_prod_kafka" edge="1" parent="1" source="n_prod" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  orthogonalLoop=1;jettySize=auto;                  exitX=1;exitY=0.5;exitDx=0;exitDy=0;                  entryX=0;entryY=0.5;entryDx=0;entryDy=0;                  fontSize=9;fontColor=#333333;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;" target="n_kafka" value="events.raw · events.status · ratelimit">
+          <mxGeometry relative="1" x="-0.0954" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_kafka_kui" edge="1" parent="1" source="n_kafka" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  orthogonalLoop=1;jettySize=auto;                  exitX=0.5;exitY=1;exitDx=0;exitDy=0;                  entryX=0.5;entryY=0;entryDx=0;entryDy=0;                  strokeColor=#EF6C00;                  fontSize=9;fontColor=#EF6C00;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;" target="n_kui" value="metrics">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_kafka_cons" edge="1" parent="1" source="n_kafka" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  orthogonalLoop=1;jettySize=auto;                  exitX=1;exitY=0.3;exitDx=0;exitDy=0;                  entryX=0;entryY=0.3;entryDx=0;entryDy=0;                  fontSize=9;fontColor=#333333;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;" target="n_cons" value="events.raw">
+          <mxGeometry relative="1" x="0.3952" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="820" y="280" />
+              <mxPoint x="820" y="220" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_kafka_dbw" edge="1" parent="1" source="n_kafka" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  orthogonalLoop=1;jettySize=auto;                  exitX=1;exitY=0.7;exitDx=0;exitDy=0;                  entryX=0;entryY=0.5;entryDx=0;entryDy=0;                  fontSize=9;fontColor=#333333;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;" target="n_dbw" value="events.status · ratelimit">
+          <mxGeometry relative="1" x="0.4141" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="821" y="280" />
+              <mxPoint x="821" y="348" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_kafka_geo" edge="1" parent="1" source="n_kafka" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  orthogonalLoop=1;jettySize=auto;                  exitX=1;exitY=1;exitDx=0;exitDy=0;                  entryX=0;entryY=0.5;entryDx=0;entryDy=0;                  fontSize=9;fontColor=#333333;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;" target="n_geo" value="geocoder.req">
+          <mxGeometry relative="1" x="0.6011" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="820" y="280" />
+              <mxPoint x="820" y="468" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_cons_kafka" edge="1" parent="1" source="n_cons" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  dashed=1;dashPattern=6 3;strokeColor=#9E9E9E;                  exitX=0.5;exitY=0;exitDx=0;exitDy=0;                  entryX=0.5;entryY=0;entryDx=0;entryDy=0;                  fontSize=9;fontColor=#777777;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;" target="n_kafka" value="geocoder.req (async thread)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1062" y="169" />
+              <mxPoint x="746" y="169" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_cons_tsb" edge="1" parent="1" source="n_cons" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  orthogonalLoop=1;jettySize=auto;                  exitX=1;exitY=0.5;exitDx=0;exitDy=0;                  entryX=0;entryY=0.25;entryDx=0;entryDy=0;                  fontSize=9;fontColor=#333333;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;" target="n_tsb" value="INSERT events · UPSERT users/repos/orgs">
+          <mxGeometry relative="1" x="-0.1128" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_dbw_tsb" edge="1" parent="1" source="n_dbw" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  orthogonalLoop=1;jettySize=auto;                  exitX=1;exitY=0.5;exitDx=0;exitDy=0;                  entryX=0;entryY=0.5;entryDx=0;entryDy=0;                  fontSize=9;fontColor=#333333;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;" value="INSERT logs">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1255.999999999999" y="339.52941176470586" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_geo_pho" edge="1" parent="1" source="n_geo" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  orthogonalLoop=1;jettySize=auto;                  exitX=0.5;exitY=1;exitDx=0;exitDy=0;                  entryX=0.5;entryY=0;entryDx=0;entryDy=0;                  startArrow=block;startFill=1;endArrow=block;endFill=1;                  fontSize=9;fontColor=#333333;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;" target="n_pho" value="HTTP geocode">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_geo_tsb" edge="1" parent="1" source="n_geo" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  orthogonalLoop=1;jettySize=auto;                  exitX=1;exitY=0.5;exitDx=0;exitDy=0;                  entryX=0;entryY=0.75;entryDx=0;entryDy=0;                  fontSize=9;fontColor=#333333;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;" target="n_tsb" value="UPDATE lat/lng/country">
+          <mxGeometry relative="1" x="-0.2884" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_tsb_fast" edge="1" parent="1" source="n_tsb" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  orthogonalLoop=1;jettySize=auto;                  exitX=1;exitY=0.4;exitDx=0;exitDy=0;                  entryX=0;entryY=0.5;entryDx=0;entryDy=0;                  fontSize=9;fontColor=#333333;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;" target="n_fast" value="asyncpg queries">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_tsb_graf" edge="1" parent="1" source="n_tsb" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  exitX=1;exitY=0.6;exitDx=0;exitDy=0;                  entryX=0;entryY=0.5;entryDx=0;entryDy=0;                  fontSize=9;fontColor=#333333;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;" target="n_graf" value="direct SQL (read-only)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1448" y="367" />
+              <mxPoint x="1448" y="405" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_fast_next" edge="1" parent="1" source="n_fast" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  orthogonalLoop=1;jettySize=auto;                  exitX=1;exitY=0.5;exitDx=0;exitDy=0;                  entryX=0;entryY=0.5;entryDx=0;entryDy=0;                  fontSize=9;fontColor=#333333;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;" target="n_next" value="REST + SSE">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_user_next" edge="1" parent="1" source="n_user" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;                  orthogonalLoop=1;jettySize=auto;                  exitX=0;exitY=0;exitDx=0;exitDy=0;                  entryX=1;entryY=0.5;entryDx=0;entryDy=0;                  fontSize=9;fontColor=#333333;                  labelBackgroundColor=#FFFFFF;labelBorderColor=none;exitX=0.5;" target="n_next" value="Port 3000">
+          <mxGeometry relative="1" x="0.5786" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="2111" y="244" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="vN95nQtFUNBw46MyjZKw-2" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b style=&quot;color: rgb(84, 110, 122); text-align: left; font-size: 13px;&quot;&gt;Docker Compose Stack&lt;/b&gt;&lt;span style=&quot;color: rgb(84, 110, 122); font-weight: 700; text-align: left;&quot;&gt;&amp;nbsp;— github-stream network&lt;/span&gt;" vertex="1">
+          <mxGeometry height="30" width="321" x="242" y="132" as="geometry" />
+        </mxCell>
+        <mxCell id="vN95nQtFUNBw46MyjZKw-3" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b style=&quot;color: rgb(191, 54, 12); text-align: left;&quot;&gt;Message Broker&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="125" x="624" y="207" as="geometry" />
+        </mxCell>
+        <mxCell id="vN95nQtFUNBw46MyjZKw-4" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b style=&quot;color: rgb(1, 87, 155); text-align: left;&quot;&gt;Data Ingestion&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="115" x="254" y="207" as="geometry" />
+        </mxCell>
+        <mxCell id="vN95nQtFUNBw46MyjZKw-5" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b style=&quot;color: rgb(27, 94, 32); text-align: left;&quot;&gt;Processing &amp;amp; Enrichment&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="180" x="930" y="146" as="geometry" />
+        </mxCell>
+        <mxCell id="vN95nQtFUNBw46MyjZKw-6" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b style=&quot;color: rgb(74, 20, 140); text-align: left;&quot;&gt;Data Storage&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="119" x="1247" y="234.5" as="geometry" />
+        </mxCell>
+        <mxCell id="vN95nQtFUNBw46MyjZKw-7" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b style=&quot;color: rgb(230, 81, 0); text-align: left;&quot;&gt;API Layer&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="60" x="1542" y="226" as="geometry" />
+        </mxCell>
+        <mxCell id="vN95nQtFUNBw46MyjZKw-8" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b style=&quot;color: rgb(136, 14, 79); text-align: left;&quot;&gt;Visualization&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="60" x="1792" y="184.5" as="geometry" />
+        </mxCell>
+        <mxCell id="vN95nQtFUNBw46MyjZKw-11" edge="1" parent="1" source="n_user" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1.003;entryY=0.465;entryDx=0;entryDy=0;entryPerimeter=0;" target="n_graf">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="vN95nQtFUNBw46MyjZKw-12" connectable="0" parent="vN95nQtFUNBw46MyjZKw-11" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="Port 3001" vertex="1">
+          <mxGeometry relative="1" x="-0.1322" y="-2" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="vN95nQtFUNBw46MyjZKw-13" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b style=&quot;color: rgb(40, 53, 147); text-align: left;&quot;&gt;External&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="73" x="16" y="293" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

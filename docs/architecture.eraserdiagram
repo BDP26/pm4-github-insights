@@ -1,0 +1,87 @@
+direction: right
+title: pm4-github-insights System Architecture
+
+// ─── External ───────────────────────────────────────────────────────────────
+github [icon: github, label: "GitHub Public API\n(events endpoint)"]
+github_tokens [icon: key, label: "GitHub Token Pool\n(3 PAT tokens\n5 000 req/h each)"]
+user [icon: users, label: "End User"]
+
+// ─── Docker Compose Stack ───────────────────────────────────────────────────
+group docker_stack [icon: docker, label: "Docker Compose Stack  (github-stream network)"] {
+
+  // Data Ingestion
+  group ingestion [icon: cloud-upload, label: "Data Ingestion"] {
+    producer [icon: python, label: "Producer\n(Python)\npoll every 10 s\nETag dedup"]
+  }
+
+  // Message Broker
+  group messaging [icon: share-2, label: "Message Broker"] {
+    kafka [icon: apachekafka, label: "Kafka (KRaft)\n1 broker · 3 partitions\n48 h retention"]
+    kafka_ui [icon: monitor, label: "Kafka UI\n:8080"]
+  }
+
+  // Data Processing
+  group processing [icon: cpu, label: "Data Processing & Enrichment"] {
+    consumer [icon: python, label: "Consumer(s)\n(Python) 1–3 instances\nGraphQL batch 20 items\nToken round-robin"]
+    db_writer [icon: python, label: "DB Writer\n(Python)\noperational logs"]
+    geocoder_client [icon: python, label: "Geocoder Client\n(Python)\n1 req/s"]
+    photon [icon: map-pin, label: "Photon Geocoder\n(OpenStreetMap)\n:2322"]
+  }
+
+  // Storage
+  group storage [icon: database, label: "Data Storage"] {
+    timescaledb [icon: postgresql, label: "TimescaleDB\n(PostgreSQL 16)\n:5432\nhypertables · cont. aggs\ncompression · 90 d retention"]
+  }
+
+  // API Layer
+  group api_layer [icon: server, label: "API Layer"] {
+    fastapi [icon: python, label: "FastAPI\n:8000\nREST + SSE\nAPScheduler (hidden gems)"]
+  }
+
+  // Visualization
+  group visualization [icon: bar-chart-2, label: "Visualization"] {
+    grafana [icon: grafana, label: "Grafana\n:3001\n7 provisioned dashboards\nread-only DB role"]
+    frontend [icon: nextdotjs, label: "Next.js Frontend\n:3000\nTailwind · Tremor\nReact Globe GL"]
+  }
+}
+
+// ─── Connections ────────────────────────────────────────────────────────────
+
+// GitHub → Producer
+github -> producer: "HTTP GET /events\n(public events)"
+github_tokens -> producer: "auth token\n(events polling)"
+github_tokens -> consumer: "auth token\n(GraphQL enrichment)"
+
+// Producer → Kafka
+producer -> kafka: "github.events.raw\ngithub.events.status\ngithub.ratelimit"
+
+// Kafka → Consumers
+kafka -> consumer: "github.events.raw\n(consumer group)"
+kafka -> db_writer: "github.events.status\ngithub.ratelimit"
+kafka -> geocoder_client: "geocoder.requests"
+
+// Consumer → Storage + Geocoding queue
+consumer -> timescaledb: "INSERT events (hypertable)\nUPSERT users, repos, orgs"
+consumer -> kafka: "geocoder.requests\n(async background thread)"
+
+// Geocoder pipeline
+geocoder_client -> photon: "HTTP geocode request\n(location string)"
+photon -> geocoder_client: "lat / lng / country"
+geocoder_client -> timescaledb: "UPDATE users\n(lat, lng, country, country_code)"
+
+// DB Writer → Storage
+db_writer -> timescaledb: "INSERT request_logs\nrate_limit_snapshots\ngeocode_logs"
+
+// Storage → API / Grafana
+timescaledb -> fastapi: "asyncpg queries\ncontinuous aggregates\nv_top_repos_24h · v_geo_events"
+timescaledb -> grafana: "Direct SQL\n(grafana_reader role)"
+
+// API → Frontend
+fastapi -> frontend: "REST JSON\nSSE stream (3 s poll)"
+
+// Kafka UI monitor
+kafka -> kafka_ui: "broker metrics\ntopic browser"
+
+// User-facing
+user -> frontend: "HTTPS :3000"
+user -> grafana: "HTTPS :3001"

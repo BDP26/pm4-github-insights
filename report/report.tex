@@ -162,6 +162,15 @@ visible in the live event stream. A repository that doubles its commit
 frequency or attracts contributors from three continents in a single day
 represents a signal of genuine innovation; today that signal is largely wasted.
 
+To address this, the system implements a \textit{Hidden Gem discovery engine} that
+assigns a statistical significance score to each repository based on observed star
+and fork activity relative to its expected baseline rate. The engine applies a
+Poisson significance test across three time windows (24\,h, 168\,h, 730\,h) and
+exposes ranked results through a dedicated web interface and REST API.
+Repositories, their owning users, and organisations are scored in parallel;
+snapshots are persisted at each interval to enable temporal trend analysis and
+cohort evaluation.
+
 This project addresses the gap with the \textit{GitHub Innovation Portal}:
 an end-to-end streaming analytics platform that continuously ingests the
 GitHub public events API, enriches each event with geographic and user-profile
@@ -181,24 +190,50 @@ Section~\ref{sec:conclusion} concludes with lessons learned and future work.
 \section{Related Work}
 \label{sec:related}
 
-\begin{todobox}
-Insert 3--5 brief paragraphs covering related systems and prior art.
-Suggested topics:
+Detecting emerging open-source projects before they gain widespread attention
+requires both historical context and the ability to process high-velocity event
+streams. Several prior systems address these challenges from complementary
+angles.
 
-\begin{itemize}
-  \item GitHub Archive / GH Archive project (historical event download)
-  \item GHTorrent / Software Heritage (large-scale repository mining)
-  \item Academic papers on streaming architectures (e.g., Lambda/Kappa
-        architecture, Kafka Streams)
-  \item Open-source trend detection tools (e.g., Trending page on GitHub,
-        third-party trackers)
-  \item Time-series databases: comparison papers (InfluxDB vs.\ TimescaleDB)
-\end{itemize}
+\textbf{GitHub Archive and GHTorrent.}
+GH Archive~\cite{gharchive} pioneered the idea of recording GitHub's public
+timeline by crawling the \texttt{GET /events} endpoint every hour and
+publishing the raw JSON payloads as gzip-compressed files on Google Cloud
+Storage. This initiative enabled retrospective analyses of GitHub's growth
+and contributor behaviour over years of data~\cite{lamarque2022github}. GHTorrent
+(GitHub Torrent) extended this concept by not only mirroring events but also
+performing a one-time full dump of repository and user metadata from the GitHub
+REST API and maintaining a live-updated MongoDB instance with the enriched
+dataset~\cite{ghtorrent}. While GH Archive and GHTorrent provide valuable
+historical depth, neither system offers near-real-time ingestion or a
+pre-computed analytics layer.
 
-Add corresponding \texttt{.bib} entries to \texttt{references.bib}.
-\end{todobox}
+\textbf{Streaming architectures.}
+The Lambda architecture~\cite{marz2015big} proposes batch and speed layers
+running in parallel, with a serving layer merging their results. The Kappa
+architecture~\cite{kreps2014question} simplifies this by treating the batch layer
+as a special case of stream processing, using a single unified pipeline. Apache
+Kafka Streams and Apache Flink are representative frameworks that enable
+stateful stream processing with exactly-once semantics. These patterns are
+well-established in the literature on real-time analytics but have only
+recently been applied to open-source ecosystem monitoring.
 
-\TODO{Write Related Work section (approx.\ 300--400 words).}
+\textbf{Time-series databases.}
+TimescaleDB, InfluxDB, and ClickHouse are frequently compared for
+time-series workloads. prior work on time-series database selection
+highlights TimescaleDB's advantage in hybrid workloads where SQL expressiveness
+and time-based compression are both required~\cite{timescaledb}. This motivates
+the storage choice in our pipeline.
+
+\textbf{Open-source trend detection.}
+GitHub's own Trending page surfaces repositories with the highest star velocity
+over a configurable time window, but it is limited to stars and does not expose
+the underlying event stream. Third-party services such as \textit{OSS Insight}
+and \textit{GitHub Star History} offer curated visualisations of repository
+popularity but are read-only analytical tools without ingest or enrichment
+capabilities. To our knowledge, no existing system combines continuous GitHub
+event ingestion, per-event geographic enrichment, and sub-minute latency
+visualisation in a single deployable pipeline.
 
 %% ── 3. System Architecture ──────────────────────────────────────────────────
 \section{System Architecture}
@@ -308,6 +343,26 @@ To implement high-performance geographic enrichment of GitHub events without rel
 \end{tabular}
 \end{table}
 
+\subsection{Trending Repository Discovery}
+\label{sec:arch-hg}
+
+The trending repository discovery module operates as an analytical layer on top
+of the enriched event data stored in TimescaleDB. It consumes the \texttt{events}
+and \texttt{repos} tables produced by the consumer and geocoding services and
+exposes its results through the FastAPI layer and the Next.js frontend.
+
+The module comprises three components. First, a set of PostgreSQL aggregate
+functions (\texttt{hidden\_gem\_repo\_scores}, \texttt{hidden\_gem\_user\_scores},
+\texttt{hidden\_gem\_org\_scores}) compute per-entity significance scores on demand
+from the raw event tables. Second, a snapshot scheduler materialises these scores
+into persistent snapshot tables at configurable intervals (24\,h, 168\,h, 730\,h).
+Third, a dedicated FastAPI sub-router exposes filtered rankings, entity detail
+views, and cohort evaluation endpoints.
+
+This design keeps scoring logic entirely within the database tier, where
+TimescaleDB can leverage time-based indexing and column compression. No additional
+microservice is required; the scheduler runs as a background thread within the
+FastAPI container.
 
 %% ── 4. Implementation ───────────────────────────────────────────────────────
 \section{Implementation}
@@ -403,6 +458,124 @@ components subscribe to the SSE stream using a typed \texttt{useSSE}
 React hook that reconnects automatically after a 3-second back-off.
 The UI is built with Tremor v3 (Recharts under the hood) and
 Tailwind CSS 4.
+
+In addition to the general analytics dashboard, the frontend provides a
+dedicated \textit{Hidden Gems} section comprising four pages. The main ranking
+page presents a paginated leaderboard switchable between three entity scopes
+(repositories, users, organisations) and three time windows (24\,h, 168\,h,
+730\,h). For the repository scope, users can apply attribute filters on
+programming language, software licence, and topic tags. A global search bar with
+scope selection enables cross-entity lookup across all snapshot data.
+
+Individual detail pages are available for repositories, users, and organisations.
+Each page displays the entity's current significance score alongside a time-series
+chart of score history derived from successive snapshots. The user detail page
+additionally lists the entity's scored repositories with their individual scores.
+The organisation detail page presents two independent score aggregates: one for
+repositories directly owned by the organisation and one for repositories owned by
+its registered members. An \textit{Evaluation Reports} view embedded in the main
+ranking page exposes cohort analysis results: for a selected snapshot, each
+previously detected repository is classified as \emph{sustained} (significance
+score $\geq 1.5$ in the subsequent same-interval snapshot) or \emph{dropped}
+(score fell below threshold), with score trajectories shown.
+
+\subsection{Hidden Gem Scoring Engine}
+\label{sec:impl-hg}
+
+\subsubsection{Momentum Metric}
+
+We define \emph{momentum} for a repository $r$ in a time window
+$[t - \Delta,\; t]$ as the weighted count of starring and forking events
+$k = \lfloor\alpha \cdot k_{\star} + \beta \cdot k_{\mathrm{fork}}\rfloor$ observed
+in that window, where $\alpha$ and $\beta$ are configurable coefficients
+(default: $\alpha = \beta = 1.0$). Raw momentum counts are not directly
+comparable across repositories: a repository with 50{,}000 cumulative stars
+receiving 100 new stars in 24\,h reflects qualitatively different behaviour from
+a two-month-old repository with 300 cumulative stars receiving the same count.
+The scoring therefore normalises observed growth against an expected rate derived
+from the full event history of each repository.
+
+\subsubsection{Statistical Scoring Model}
+
+\paragraph{Expected rate.}
+Let $\lambda$ denote the expected weighted event count in the window under a
+stationary Poisson null model:
+
+$$\lambda = \frac{\alpha \cdot S_{\mathrm{base}} + \beta \cdot F_{\mathrm{base}}}
+  {\max(A_r,\,1)} \times \min(\Delta,\,A_r)$$
+
+where $S_{\mathrm{base}}$ and $F_{\mathrm{base}}$ are the cumulative star and fork
+counts accrued before the window, $A_r$ is the repository age in hours at the
+start of the window, and $\Delta$ is the window duration in hours. For
+repositories younger than the window ($A_r \leq \Delta$), the factor
+$\min(\Delta, A_r) = A_r$ cancels the denominator, reducing $\lambda$ to the
+full historical baseline. This prevents repositories with limited history from
+receiving inflated scores due to a short observation period.
+
+\paragraph{Significance score.}
+Let $X \sim \mathrm{Poisson}(\lambda)$ and $k$ be the observed weighted event
+count. The Poisson survival function is
+$\mathrm{SF}(k) = P(X \geq k;\,\lambda)$. The significance score is defined as:
+
+$$\text{sig\_score} = \min\!\left(\frac{-\ln\,\mathrm{SF}(k)}{34.5} \times 10,\;\; 10\right)$$
+
+The score equals zero when $k$ is consistent with the expected rate and grows as
+observed growth becomes increasingly improbable under the null model, with a
+ceiling of 10. The constant $34.5$ normalises the dynamic range to this maximum.
+A score of $3.0$ corresponds to
+$\mathrm{SF} \leq e^{-10.35} \approx 3.2 \times 10^{-5}$, the primary
+classification boundary used by the frontend to designate a repository as a
+genuine hidden gem. The survival function is computed in log-space via an
+iterative accumulation scheme (\texttt{F\_poisson\_sf()} in
+\texttt{004\_hidden\_gem\_functions.sql}) to avoid numerical underflow for large
+$k$ or small $\lambda$.
+
+\paragraph{Noise guards.}
+Repositories must satisfy minimum activity thresholds within the window (default:
+$k_{\star} \geq 5$, $k_{\mathrm{fork}} \geq 1$) before a score is assigned. Repositories
+that do not meet these guards receive a \texttt{NULL} score and are excluded from
+rankings. The thresholds are configurable via environment variables.
+
+\subsubsection{User and Organisation Aggregation}
+
+Significance scores aggregate from repositories to users and organisations. For
+users, the aggregate function sums all repository scores within the window
+(\texttt{total\_score}), records the highest individual score
+(\texttt{best\_repo\_score}), and counts repositories that exceed the
+sig\_score\,$\geq 3.0$ boundary (\texttt{hidden\_gem\_count}). For organisations
+the aggregation produces two independent sub-totals: one for repositories directly
+owned by the organisation, and one for repositories owned by registered members
+of the organisation (resolved via the \texttt{organization\_members} table). This
+split allows an organisation to assess its own output and the collective
+contribution of its member community independently.
+
+\subsubsection{Snapshot Scheduler}
+
+Because the aggregate queries scan the full \texttt{events} table, results are
+materialised at fixed intervals by the snapshot scheduler
+(\texttt{api/scheduler/snapshot\_scheduler.py}), implemented with APScheduler.
+Three intervals are configured: 24\,h, 168\,h, and 730\,h. On each run the
+scheduler inserts a metadata record into \texttt{hidden\_gem\_snapshot\_runs},
+fetches fresh scores from all three aggregate functions, bulk-inserts results
+into the corresponding snapshot tables (\texttt{hidden\_gem\_snapshot\_repos},
+\texttt{hidden\_gem\_snapshot\_users}, \texttt{hidden\_gem\_snapshot\_orgs}), and
+updates the run record with per-entity counts. Transient database errors trigger
+exponential back-off with a timeout scaled linearly by attempt number. Stored
+snapshots serve two purposes: they supply the score history data consumed by the
+frontend detail pages, and they enable the cohort evaluation described in
+Section~\ref{sec:eval-hg}.
+
+\subsubsection{API Layer}
+
+Nine REST endpoints under \texttt{/api/hidden-gems/} expose the discovery engine.
+Live rankings (\texttt{/live}) carry a 30-second cache TTL to amortise aggregate
+query cost; filter metadata endpoints use a 5-minute TTL. A manual trigger
+endpoint (\texttt{POST /snapshots/trigger}) is restricted to administrative
+clients and allows on-demand snapshot creation outside the regular schedule.
+
+\TODO{Insert table of Hidden Gem API endpoints (method, path, query parameters,
+description, cache TTL) here. Mirror the format of Table~\ref{tab:endpoints}.
+Add a \texttt{\textbackslash label\{tab:hg-api\}} so it can be referenced.}
 
 %% ── 5. Evaluation ───────────────────────────────────────────────────────────
 \section{Evaluation}
@@ -501,6 +674,43 @@ Table~\ref{tab:coverage} shows the breadth of the data collected.
 \texttt{events} hypertable. Query:
 \texttt{SELECT * FROM chunk\_compression\_stats('events');}}
 
+\subsection{Hidden Gem Detection Quality}
+\label{sec:eval-hg}
+
+\subsubsection{Cohort Analysis Methodology}
+
+To assess detection quality without external ground truth, we apply a cohort
+evaluation approach: a repository detected in snapshot run $i$ with
+sig\_score\,$\geq 1.5$ is classified as \emph{sustained} if in the immediately
+following snapshot of the same interval it again achieves sig\_score\,$\geq 1.5$;
+otherwise it is classified as \emph{dropped}. This methodology is implemented in
+the \texttt{/api/hidden-gems/snapshots/\{id\}/cohort} endpoint and is directly
+accessible via the \textit{Evaluation Reports} view of the frontend. Sustained
+detections are interpreted as genuine momentum signals; dropped detections
+indicate transient activity spikes.
+
+\TODO{Report cohort results for each interval (24\,h, 168\,h, 730\,h): number
+of snapshots evaluated, total repositories flagged (sig\_score\,$\geq 1.5$),
+sustained count, dropped count, and precision (sustained\,/\,total). Present as
+a three-row table. Values are directly readable from the cohort endpoint response.}
+
+\subsubsection{Representative Detections}
+
+\TODO{Present the top-5 highest-scoring repositories observed during the
+evaluation period, taken directly from the live ranking dashboard (repository
+scope, highest sig\_score across any window). For each entry report: full name,
+programming language, sig\_score, number of stars and forks accrued in the
+window, and a one-sentence description of the project. This constitutes the
+primary qualitative output of the system.}
+
+\subsubsection{Score Distribution Across Snapshots}
+
+\TODO{Report the distribution of sig\_score values across all stored snapshot
+runs, broken down by time window (24\,h, 168\,h, 730\,h). Report: number of
+scored repositories, mean, median, 90th-percentile sig\_score, fraction with
+sig\_score\,$\geq 3.0$, and fraction with sig\_score\,$\geq 1.5$. Values can be
+obtained by querying the \texttt{hidden\_gem\_snapshot\_repos} table directly.}
+
 %% ── 6. Technology Decision Rationale ────────────────────────────────────────
 \section{Technology Decision Rationale}
 \label{sec:decisions}
@@ -582,24 +792,29 @@ production-grade, end-to-end streaming analytics platform using entirely
 open-source components within a single academic semester. The combination of
 Kafka for durable buffering, TimescaleDB for time-series storage, and a
 modern React frontend proved well-suited to the high-velocity,
-enrichment-heavy nature of the GitHub event stream.
+enrichment-heavy nature of the GitHub event stream. A central contribution is
+the Hidden Gem discovery engine, which applies a Poisson significance model
+to the continuous event stream to surface repositories, users, and organisations
+exhibiting statistically anomalous activity across daily, weekly, and monthly
+time windows. \TODO{Add 1--2 sentences with concrete findings from
+Section~\ref{sec:eval-hg}: e.g., cohort precision per window, total number of
+distinct hidden gems identified, and any notable patterns such as language
+distribution or temporal concentration.}
 
 Several directions remain for future work:
 
 \begin{itemize}
   \item \textbf{Stream analytics.} Attaching Apache Flink or Spark
     Structured Streaming to the \texttt{github.events.raw} topic would
-    enable windowed anomaly detection (e.g., sudden starring spikes) without
-    modifying the existing pipeline.
-  \item \textbf{Granular filtering (O3).} Extending the FastAPI query layer
-    with language, licence, and topic filter parameters and wiring these
-    into a dashboard filter panel would complete the third project objective.
+    enable stateful, sub-second anomaly detection as an alternative to the
+    current batch-snapshot approach, without modifying the existing pipeline.
   \item \textbf{Long-term archival.} A Kafka Connect S3 sink writing Parquet
     files to object storage would enable cost-efficient historical analysis
     beyond the 90-day TimescaleDB retention window.
-  \item \textbf{Alerting.} Grafana alerting rules on \texttt{event\_stats\_5m}
-    could notify users when a repository's event velocity exceeds a configurable
-    threshold --- a first step towards automated ``rising star'' detection.
+  \item \textbf{Alerting integration.} Configuring Grafana alerting rules on
+    the Hidden Gem snapshot tables could proactively notify users when a
+    repository's significance score crosses a predefined threshold, removing
+    the need for manual inspection of the ranking dashboard.
 \end{itemize}
 
 %% ── Acknowledgments ─────────────────────────────────────────────────────────

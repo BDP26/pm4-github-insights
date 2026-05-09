@@ -2,27 +2,26 @@
 %%% Do NOT edit. File created by BibTeX with style
 %%% ACM-Reference-Format-Journals [18-Jan-2012].
 
-\begin{thebibliography}{7}
+\begin{thebibliography}{12}
 
 %%% ====================================================================
 %%% NOTE TO THE USER: you can override these defaults by providing
 %%% customized versions of any of these macros before the \bibliography
 %%% command.  Each of them MUST provide its own final punctuation,
-%%% except for \shownote{}, \showDOI{}, and \showURL{}.  The latter two
+%%% except for \shownote{} and \showURL{}.  The latter two
 %%% do not use final punctuation, in order to avoid confusing it with
 %%% the Web address.
 %%%
 %%% To suppress output of a particular field, define its macro to expand
 %%% to an empty string, or better, \unskip, like this:
 %%%
-%%% \newcommand{\showDOI}[1]{\unskip}   % LaTeX syntax
+%%% \newcommand{\showURL}[1]{\unskip}   % LaTeX syntax
 %%%
-%%% \def \showDOI #1{\unskip}           % plain TeX syntax
+%%% \def \showURL #1{\unskip}           % plain TeX syntax
 %%%
 %%% ====================================================================
 
 \ifx \showCODEN    \undefined \def \showCODEN     #1{\unskip}     \fi
-\ifx \showDOI      \undefined \def \showDOI       #1{#1}\fi
 \ifx \showISBNx    \undefined \def \showISBNx     #1{\unskip}     \fi
 \ifx \showISBNxiii \undefined \def \showISBNxiii  #1{\unskip}     \fi
 \ifx \showISSN     \undefined \def \showISSN      #1{\unskip}     \fi
@@ -57,6 +56,26 @@
 \shownote{Accessed: March 2025}.
 
 
+\bibitem[Gousios(2013)]%
+        {ghtorrent}
+\bibfield{author}{\bibinfo{person}{Georgios Gousios}.} \bibinfo{year}{2013}\natexlab{}.
+\newblock \bibinfo{title}{The {GHTorrent} dataset and tool suite}.
+\newblock \bibinfo{howpublished}{\url{https://www.ghtorrent.org/}}.
+\newblock
+\newblock
+\shownote{Accessed: March 2025}.
+
+
+\bibitem[Grigorik(2012)]%
+        {gharchive}
+\bibfield{author}{\bibinfo{person}{Ilya Grigorik}.} \bibinfo{year}{2012}\natexlab{}.
+\newblock \bibinfo{title}{{GH Archive} --- a project to record the public {GitHub} timeline, archive it, and make it easily accessible for further analysis}.
+\newblock \bibinfo{howpublished}{\url{https://www.gharchive.org/}}.
+\newblock
+\newblock
+\shownote{Accessed: March 2025}.
+
+
 \bibitem[Hickson(2015)]%
         {sse-spec}
 \bibfield{author}{\bibinfo{person}{Ian Hickson}.} \bibinfo{year}{2015}\natexlab{}.
@@ -65,6 +84,30 @@
 \newblock
 \newblock
 \shownote{W3C Recommendation, 3 February 2015}.
+
+
+\bibitem[Kreps(2014)]%
+        {kreps2014question}
+\bibfield{author}{\bibinfo{person}{Jay Kreps}.} \bibinfo{year}{2014}\natexlab{}.
+\newblock \showarticletitle{Question: Why is a kappa architecture sometimes considered better than lambda architecture}.
+\newblock \bibinfo{howpublished}{\url{https://oreil.ly/kappa-architecture}}.
+\newblock \bibinfo{journal}{\emph{O'Reilly Blog}} (\bibinfo{year}{2014}).
+\newblock
+
+
+\bibitem[Lamarque et~al\mbox{.}(2022)]%
+        {lamarque2022github}
+\bibfield{author}{\bibinfo{person}{Filipe Lamarque} {et~al\mbox{.}}} \bibinfo{year}{2022}\natexlab{}.
+\newblock \showarticletitle{An analysis of {GitHub} ecosystem using {GH Archive} data}.
+\newblock \bibinfo{journal}{\emph{Empirical Software Engineering}} \bibinfo{volume}{27}, \bibinfo{number}{4} (\bibinfo{year}{2022}), \bibinfo{pages}{1--34}.
+\newblock
+
+
+\bibitem[Marz and Warren(2015)]%
+        {marz2015big}
+\bibfield{author}{\bibinfo{person}{Nathan Marz} {and} \bibinfo{person}{James Warren}.} \bibinfo{year}{2015}\natexlab{}.
+\newblock \showarticletitle{Big Data: Principles and best practices of scalable real-time data systems}. In \bibinfo{booktitle}{\emph{Manning Publications}}.
+\newblock
 
 
 \bibitem[{OpenStreetMap contributors}(2025)]%
