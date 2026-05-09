@@ -1,0 +1,138 @@
+\documentclass[tikz,border=10pt,10pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{positioning, shapes.geometric, backgrounds, fit, arrows.meta}
+
+\begin{document}
+
+\begin{tikzpicture}[
+    >=Stealth, % Stil der Pfeilspitzen
+    % --- Farbdefinitionen aus dem wissenschaftlichen Theme ---
+    extFill/.style={fill={rgb,255:red,244;green,246;blue,246}, draw={rgb,255:red,93;green,109;blue,126}},
+    ingFill/.style={fill={rgb,255:red,235;green,245;blue,251}, draw={rgb,255:red,40;green,116;blue,166}},
+    broFill/.style={fill={rgb,255:red,254;green,245;blue,231}, draw={rgb,255:red,211;green,84;blue,0}},
+    proFill/.style={fill={rgb,255:red,234;green,250;blue,241}, draw={rgb,255:red,30;green,132;blue,73}},
+    stoFill/.style={fill={rgb,255:red,244;green,236;blue,247}, draw={rgb,255:red,108;green,52;blue,131}},
+    apiFill/.style={fill={rgb,255:red,252;green,243;blue,207}, draw={rgb,255:red,183;green,149;blue,11}},
+    vizFill/.style={fill={rgb,255:red,234;green,236;blue,238}, draw={rgb,255:red,52;green,73;blue,94}},
+    usrFill/.style={fill=white, draw={rgb,255:red,33;green,47;blue,61}},
+    subFill/.style={fill={rgb,255:red,252;green,252;blue,252}},
+    
+    % --- Globale Node-Stile (Jetzt mit festen Größen und größerer Schrift) ---
+    base/.style={
+        thick, 
+        align=center, 
+        inner sep=1.5ex, 
+        minimum width=3.2cm,  % Einheitliche Mindestbreite
+        minimum height=1.4cm, % Einheitliche Mindesthöhe
+        rounded corners=4pt, 
+        text={rgb,255:red,23;green,32;blue,42}, 
+        font=\sffamily\normalsize % Größere Schrift für Boxen
+    },
+    database/.style={
+        thick, 
+        align=center, 
+        inner sep=1.5ex, 
+        shape=cylinder, 
+        shape border rotate=90, 
+        aspect=0.25, 
+        minimum width=3.8cm,  % Datenbank etwas breiter
+        minimum height=2.4cm, % Datenbank etwas höher
+        text={rgb,255:red,23;green,32;blue,42}, 
+        font=\sffamily\normalsize
+    },
+    userNode/.style={
+        base, 
+        usrFill, 
+        shape=circle, 
+        inner sep=1ex,
+        minimum width=2.2cm,
+        minimum height=2.2cm
+    },
+    % --- Linienstile ---
+    edge_style/.style={->, thick, draw={rgb,255:red,52;green,73;blue,94}},
+    bidir_edge/.style={<->, thick, draw={rgb,255:red,52;green,73;blue,94}},
+    % --- Beschriftungsstil (Größere Schrift für bessere Lesbarkeit im Druck) ---
+    edge_label/.style={
+        font=\sffamily\footnotesize, % Größer als vorher
+        fill={rgb,255:red,252;green,252;blue,252}, 
+        inner sep=5pt, 
+        rounded corners=2pt, 
+        text={rgb,255:red,23;green,32;blue,42}, 
+        align=center
+    }
+]
+
+    % ===========================
+    % 1. PLATZIERUNG DER KNOTEN (Angepasst an die breiteren Boxen)
+    % ===========================
+    \node[external]   (GH)      at (0, 0)      {GitHub API};
+    \node[ingestion]  (Prod)    at (7, 0)      {Producer};
+    \node[broker]     (Kafka)   at (14, 0)     {Kafka};
+    
+    % Vertikaler Abstand auf Y=2.8 und Y=-2.8 erhöht, Geocoder auf Y=6.5
+    \node[processing] (Cons)    at (22, 2.8)   {Consumer(s)};
+    \node[processing] (Geo)     at (22, 6.5)   {Geocoder \&\\Photon};
+    \node[processing] (DBW)     at (22, -2.8)  {DB Writer};
+    
+    \node[storage]    (DB)      at (31, 0)     {TimescaleDB\\(PostgreSQL)};
+    
+    % API und Grafana sauber untereinander
+    \node[api]        (API)     at (39, 2.8)   {FastAPI};
+    \node[viz]        (Grafana) at (39, -2.8)  {Grafana};
+    \node[viz]        (Front)   at (47, 2.8)   {Next.js\\Frontend};
+    
+    \node[userNode]   (User)    at (54, 0)     {End-\\User};
+
+    % ===========================
+    % 2. VERBINDUNGEN (Mit exakten mathematischen Mittelpunkten)
+    % ===========================
+    
+    % GitHub -> Producer
+    \draw[edge_style] (GH.east) -- node[edge_label] {GET /events} (Prod.west);
+
+    % GraphQL Call: Startet leicht links versetzt am Consumer (um Geocoder-Pfeil auszuweichen)
+    % Verläuft horizontal exakt zwischen Consumer und Geocoder auf Y=4.8
+    \draw[edge_style, dashed, rounded corners=8pt] 
+        ([xshift=-15pt]Cons.north) -- ([xshift=-15pt]22, 4.8) -- node[edge_label] {GraphQL (Users \& Repos abfragen)} (0, 4.8) -- (GH.north);
+
+    % Producer -> Kafka
+    \draw[edge_style] (Prod.east) -- node[edge_label] {events.raw} (Kafka.west);
+
+    % Kafka -> Consumer & DB Writer (Knick in der Mitte bei X=18)
+    \draw[edge_style, rounded corners=8pt] (Kafka.east) -- (18, 0) -- (18, 2.8) -- node[edge_label] {events.raw} (Cons.west);
+    \draw[edge_style, rounded corners=8pt] (Kafka.east) -- (18, 0) -- (18, -2.8) -- node[edge_label] {events.status /\\ratelimit} (DBW.west);
+
+    % Consumer <-> Geocoder: Startet leicht rechts versetzt am Consumer
+    \draw[bidir_edge] ([xshift=15pt]Cons.north) -- node[edge_label] {geocoder.req} ([xshift=15pt]Geo.south);
+
+    % Consumer & DB Writer -> Datenbank (Knick in der Mitte bei X=26.5)
+    \draw[edge_style, rounded corners=8pt] (Cons.east) -- (26.5, 2.8) -- (26.5, 15pt) -- node[edge_label] {INSERT events\\UPSERT users/repos} ([yshift=15pt]DB.west);
+    \draw[edge_style, rounded corners=8pt] (DBW.east) -- (26.5, -2.8) -- (26.5, -15pt) -- node[edge_label] {INSERT logs} ([yshift=-15pt]DB.west);
+
+    % Datenbank -> API & Grafana (Knick in der Mitte bei X=35)
+    \draw[edge_style, rounded corners=8pt] ([yshift=15pt]DB.east) -- (35, 15pt) -- (35, 2.8) -- node[edge_label] {Data calls\\(asyncpg)} (API.west);
+    \draw[edge_style, rounded corners=8pt] ([yshift=-15pt]DB.east) -- (35, -15pt) -- (35, -2.8) -- node[edge_label] {SQL (Read-only)} (Grafana.west);
+
+    % API -> Frontend
+    \draw[edge_style] (API.east) -- node[edge_label] {REST / SSE} (Front.west);
+
+    % Frontend & Grafana -> Endbenutzer (Knick in der Mitte bei X=50.5)
+    \draw[edge_style, rounded corners=8pt] (Front.east) -- (50.5, 2.8) -- (50.5, 12pt) -- node[edge_label, fill=white] {Port 3000} ([yshift=12pt]User.west);
+    \draw[edge_style, rounded corners=8pt] (Grafana.east) -- (50.5, -2.8) -- (50.5, -12pt) -- node[edge_label, fill=white] {Port 3001} ([yshift=-12pt]User.west);
+
+    % ===========================
+    % 3. SUBGRAPH (DOCKER STACK)
+    % ===========================
+    \begin{scope}[on background layer]
+        % Box, die alle internen Komponenten umschließt
+        \node[subFill, draw={rgb,255:red,178;green,186;blue,187}, thick, dashed, rounded corners=3mm, inner sep=20pt, 
+              fit=(Prod) (Kafka) (Cons) (Geo) (DBW) (DB) (API) (Grafana) (Front)] (box) {};
+              
+        % Beschriftung der Box (oben links)
+        \node[anchor=south west, font=\sffamily\bfseries\normalsize, text={rgb,255:red,93;green,109;blue,126}, inner xsep=5pt, inner ysep=12pt] 
+        at (box.north west) {Docker Compose Stack (github-stream)};
+    \end{scope}
+
+\end{tikzpicture}
+
+\end{document}

@@ -1,111 +1,56 @@
-%%{init: {
-  "theme": "base",
-  "themeVariables": {
-    "fontSize": "13px",
-    "fontFamily": "ui-sans-serif, system-ui, sans-serif"
-  }
-}}%%
-flowchart LR
+graph LR
+    %% Externe Quelle
+    GH["GitHub API"] -->|"GET /events"| Prod["Producer (Python)"]
 
-    %% ── External ────────────────────────────────────────────────────────────
-    subgraph EXT["  External  "]
-        direction TB
-        GITHUB["GitHub API\napi.github.com/events"]
-        TOKENS["Token Pool\n3 PAT · 5 000 req/h"]
+    %% Kern-System (Docker Stack)
+    subgraph Docker_Stack["Docker Compose Stack (github-stream)"]
+        
+        %% Ingestion & Broker
+        Prod -->|"events.raw"| Kafka["Kafka (KRaft)"]
+        
+        %% Verarbeitung & Anreicherung
+        Kafka -->|"events.raw"| Cons["Consumer(s)"]
+        Cons <-->|"geocoder.req"| Geo["Geocoder & Photon"]
+        
+        %% Log-Verarbeitung
+        Kafka -->|"events.status / ratelimit"| DBW["DB Writer"]
+        
+        %% Speicherung
+        Cons -->|"INSERT / UPSERT"| DB[("TimescaleDB (PostgreSQL)")]
+        DBW -->|"INSERT logs"| DB
+        
+        %% API & Visualisierung
+        DB -->|"Datenabruf (asyncpg)"| API["FastAPI"]
+        DB -->|"SQL (Read-only)"| Grafana["Grafana"]
+        
+        API -->|"REST / SSE"| Front["Next.js Frontend"]
     end
 
-    %% ── Docker Compose Stack ────────────────────────────────────────────────
-    subgraph DOCKER["  Docker Compose Stack — github-stream network  "]
-        direction LR
+    %% Endbenutzer
+    Front -->|"Port 3000"| User(("Endbenutzer"))
+    Grafana -->|"Port 3001"| User
 
-        subgraph ING["  Data Ingestion  "]
-            PROD["Producer\nPython · 10 s poll\nETag dedup"]
-        end
+    %% --- Farben und Styling für wissenschaftliche Reports ---
+    
+    %% Definition der Farbpaletten (Gedeckte Pastelltöne, dunkle Ränder für hohen Kontrast)
+    classDef external fill:#F4F6F6,stroke:#5D6D7E,stroke-width:2px,color:#17202A;
+    classDef ingestion fill:#EBF5FB,stroke:#2874A6,stroke-width:2px,color:#17202A;
+    classDef broker fill:#FEF5E7,stroke:#D35400,stroke-width:2px,color:#17202A;
+    classDef processing fill:#EAFAF1,stroke:#1E8449,stroke-width:2px,color:#17202A;
+    classDef storage fill:#F4ECF7,stroke:#6C3483,stroke-width:2px,color:#17202A;
+    classDef api fill:#FCF3CF,stroke:#B7950B,stroke-width:2px,color:#17202A;
+    classDef viz fill:#EAECEE,stroke:#34495E,stroke-width:2px,color:#17202A;
+    classDef userNode fill:#FFFFFF,stroke:#212F3D,stroke-width:2px,color:#17202A;
 
-        subgraph BRK["  Message Broker  "]
-            direction TB
-            KAFKA["Kafka KRaft\n3 partitions · 48 h"]
-            KUI["Kafka UI\nPort 8080"]
-        end
-
-        subgraph PRC["  Processing & Enrichment  "]
-            direction TB
-            CONS["Consumer(s)\n1–3 instances\nGraphQL batch 20"]
-            DBW["DB Writer\nrequest logs\nratelimit snapshots"]
-            GEO["Geocoder Client\nPython · 1 req/s"]
-            PHO(["Photon\nOpenStreetMap · Port 2322"])
-        end
-
-        subgraph STO["  Data Storage  "]
-            TSB[("TimescaleDB\nPostgreSQL 16 · Port 5432\nhypertables · cont. aggs\n90 d retention")]
-        end
-
-        subgraph APIL["  API Layer  "]
-            FAST["FastAPI · Port 8000\nREST + SSE\nAPScheduler · Hidden Gems"]
-        end
-
-        subgraph VIZ["  Visualization  "]
-            direction TB
-            NEXT["Next.js · Port 3000\nReact · Tremor · Globe GL"]
-            GRAF["Grafana · Port 3001\n7 dashboards · read-only SQL"]
-        end
-    end
-
-    USER(["End User\nBrowser"])
-
-    %% ── Data flow arrows ────────────────────────────────────────────────────
-
-    %% External → Ingestion
-    GITHUB -->|"HTTP GET /events"| PROD
-
-    %% Ingestion → Broker  (3 Kafka topics published)
-    PROD -->|"events.raw\nevents.status\nratelimit"| KAFKA
-
-    %% Broker internal monitoring link
-    KAFKA -->|"metrics"| KUI
-
-    %% Broker → Processing  (fan-out to 3 consumers)
-    KAFKA -->|"events.raw"| CONS
-    KAFKA -->|"events.status\nratelimit"| DBW
-    KAFKA -->|"geocoder.req"| GEO
-
-    %% Consumer loopback: queues geocoder requests asynchronously
-    CONS -.->|"geocoder.req\nasync thread"| KAFKA
-
-    %% Processing → Storage
-    CONS -->|"INSERT events\nUPSERT users/repos/orgs"| TSB
-    DBW  -->|"INSERT logs"| TSB
-    GEO <-->|"HTTP geocode"| PHO
-    GEO  -->|"UPDATE lat/lng/country"| TSB
-
-    %% Storage → API + direct Grafana
-    TSB -->|"asyncpg"| FAST
-    TSB -->|"direct SQL"| GRAF
-
-    %% API → Frontend
-    FAST -->|"REST + SSE"| NEXT
-
-    %% User access
-    USER -->|"Port 3000"| NEXT
-    USER -->|"Port 3001"| GRAF
-
-    %% ── Auth arrows (dashed, secondary) ────────────────────────────────────
-    TOKENS -.->|"events auth"| PROD
-    TOKENS -.->|"GraphQL auth"| CONS
-
-    %% ── Styles (match TikZ colour palette) ─────────────────────────────────
-    classDef ext  fill:#C5CAE9,stroke:#5C6BC0,color:#1a237e
-    classDef ing  fill:#81D4FA,stroke:#0288D1,color:#01234a
-    classDef brk  fill:#FFCC80,stroke:#EF6C00,color:#3e2723
-    classDef prc  fill:#A5D6A7,stroke:#2E7D32,color:#1b3a1c
-    classDef sto  fill:#CE93D8,stroke:#6A1B9A,color:#1a0030
-    classDef api  fill:#FFF176,stroke:#F57F17,color:#33291a
-    classDef viz  fill:#F48FB1,stroke:#AD1457,color:#1a0010
-
-    class GITHUB,TOKENS,USER ext
-    class PROD ing
-    class KAFKA,KUI brk
-    class CONS,DBW,GEO,PHO prc
-    class TSB sto
-    class FAST api
-    class NEXT,GRAF viz
+    %% Zuweisung der Klassen zu den Knoten
+    class GH external;
+    class Prod ingestion;
+    class Kafka broker;
+    class Cons,Geo,DBW processing;
+    class DB storage;
+    class API api;
+    class Grafana,Front viz;
+    class User userNode;
+    
+    %% Styling für den Subgraph (Sehr subtiler Hintergrund, grauer gestrichelter Rahmen)
+    style Docker_Stack fill:#FCFCFC,stroke:#B2BABB,stroke-width:2px,stroke-dasharray: 5 5,color:#5D6D7E;

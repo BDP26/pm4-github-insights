@@ -12,6 +12,31 @@
 \usepackage{float}             % [H] placement specifier
 \usepackage{mdframed}          % Framed TODO boxes (safer than tcolorbox with acmart)
 \usepackage{listings}          % Code snippets (optional)
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, fit, backgrounds, calc}
+
+%% ── Diagram colour palette (Material Design 200/300) ───────────────────────
+\definecolor{cExt}{HTML}{C5CAE9}
+\definecolor{cIng}{HTML}{81D4FA}
+\definecolor{cBrk}{HTML}{FFCC80}
+\definecolor{cPrc}{HTML}{A5D6A7}
+\definecolor{cSto}{HTML}{CE93D8}
+\definecolor{cApi}{HTML}{FFF176}
+\definecolor{cViz}{HTML}{F48FB1}
+
+%% ── ER diagram style (used in appendix schema figures) ─────────────────────
+\tikzset{
+  tbl/.style={
+    draw=gray!65, fill=white, thick,
+    rounded corners=3pt,
+    text width=4.6cm, align=left,
+    inner sep=5pt,
+    font=\fontsize{7.5}{9}\selectfont\ttfamily,
+  },
+  fkarr/.style={
+    -{Stealth[length=4.5pt,width=3pt]}, thick, dashed, gray!50!black,
+  },
+}
 
 %% ── TODO helper ────────────────────────────────────────────────────────────
 \mdfdefinestyle{todoStyle}{
@@ -220,7 +245,7 @@ recently been applied to open-source ecosystem monitoring.
 
 \textbf{Time-series databases.}
 TimescaleDB, InfluxDB, and ClickHouse are frequently compared for
-time-series workloads. prior work on time-series database selection
+time-series workloads. Prior work on time-series database selection
 highlights TimescaleDB's advantage in hybrid workloads where SQL expressiveness
 and time-based compression are both required~\cite{timescaledb}. This motivates
 the storage choice in our pipeline.
@@ -239,24 +264,22 @@ visualisation in a single deployable pipeline.
 \section{System Architecture}
 \label{sec:architecture}
 
-\begin{figure}[h]
+\begin{figure*}[t]
   \centering
-  % Replace with an actual architecture diagram exported as PDF or PNG.
-  % \includegraphics[width=\linewidth]{architecture}
-  \fbox{\parbox{0.9\linewidth}{\centering\vspace{1.2cm}
-    \TODO{Insert architecture diagram here.}\\
-    Export the ASCII diagram below as a vector figure (e.g., draw.io PDF).
-    \vspace{1.2cm}}}
+  \includegraphics[width=\textwidth]{diagrams/system-architecture}
   \caption{End-to-end architecture of the GitHub Innovation Portal. Events
-    flow from the GitHub API through Kafka into TimescaleDB, where they are
-    served by FastAPI to the Next.js dashboard and Grafana.}
-  \Description{Block diagram showing six services connected in a pipeline:
-    Producer polls the GitHub API and publishes to Kafka; Consumer reads from
-    Kafka, enriches events, and writes to TimescaleDB; FastAPI exposes REST
-    and SSE endpoints consumed by the Next.js frontend; Grafana reads
-    TimescaleDB directly.}
+    flow from the GitHub API through Kafka (KRaft) into TimescaleDB, where
+    they are served by FastAPI to the Next.js dashboard and Grafana.
+    Dashed arrows indicate authentication and auxiliary data flows.
+    See Appendix~\ref{appendix:arch-full} for the full annotated diagram.}
+  \Description{Block diagram with seven grouped layers: External (GitHub API
+    and token pool), Ingestion (Producer), Broker (Kafka and Kafka UI),
+    Processing \& Enrichment (Consumer instances, DB Writer, Geocoder Client,
+    Photon), Storage (TimescaleDB), API Layer (FastAPI), and Visualization
+    (Next.js and Grafana). Solid arrows show data flow; dashed arrows show
+    auth and geocoder loopback paths.}
   \label{fig:architecture}
-\end{figure}
+\end{figure*}
 
 The architecture of the project consists of a real-time data streaming pipeline designed to ingest, enrich, and visualize GitHub events. It is built to efficiently manage GitHub API rate limits and ensure high scalability by decoupling individual components using a message broker.
 
@@ -275,6 +298,7 @@ The \textbf{Producer} (\texttt{producer/producer.py}) serves as the entry point 
     \item \textbf{Decoupling:} It separates the high-frequency data ingestion (Producer) from the more complex data enrichment steps (Consumer).
     \item \textbf{Durability:} Kafka serves as a reliable buffer; if a consumer fails, data is retained for 48 hours, allowing the system to resume where it left off.
     \item \textbf{Scalability:} The main topics are divided into three partitions, enabling parallel processing by multiple consumer instances.
+    \item \textbf{Topics:} Four topics carry distinct payload types: \texttt{github.events.raw} (raw event JSON), \texttt{github.events.status} (per-request enrichment status), \texttt{github.ratelimit} (rate-limit snapshots), and \texttt{geocoder.requests} (geocoder request logs, single partition).
 \end{itemize}
 
 \subsection{Processing and Enrichment (Consumer \& Geocoder)}
@@ -284,7 +308,7 @@ In this stage, raw events are transformed into high-value data through a highly 
     \item \textbf{Parallel Consumer Instances:} The system is designed for horizontal scalability. Multiple consumer instances (e.g., three instances in multi-consumer mode) can run in parallel. Using Kafka's partition assignment, each instance is "pinned" to specific partitions, ensuring that event processing is distributed evenly and without overlap.
     \item \textbf{Token Pool Management:} To overcome GitHub's rate limits, the system implements a \textbf{TokenPool} mechanism. It manages multiple API keys for both user and repository metadata. The pool uses a round-robin strategy and automatically skips tokens that have been flagged as rate-limited, resuming their use only after their specific reset time has passed.
     \item \textbf{GraphQL Batch Processing:} The primary enrichment method uses the \textbf{GitHub GraphQL API}. Instead of requesting data for every event individually, the \texttt{Enricher} accumulates up to 20 items (users or repositories) and fetches them in a single batched request. This significantly reduces the number of required HTTP calls and maximizes the utility of each API token.
-    \item \textbf{REST Fallback Mechanism:} While GraphQL is the preferred method for efficiency, the system includes a robust \textbf{REST API fallback}. If a GraphQL batch query returns null for specific entities or encounters a partial failure, the system automatically falls back to individual REST calls to ensure that no data point is missed.
+    \item \textbf{REST Fallback Mechanism:} While GraphQL is the preferred method for efficiency, the system includes a \textbf{REST API fallback}. If a GraphQL batch query returns \texttt{null} for a specific entity, the system automatically issues an individual REST call for that entity.
     \item \textbf{Geocoding (Geocoder \& Photon):} Geographic data is processed by a dedicated \texttt{geocoder} service. It extracts location strings from enriched user profiles and queries the local \textbf{Photon} instance. This allows the system to resolve coordinates and country codes in the background without blocking the main event-processing pipeline.
 \end{itemize}
 
@@ -292,12 +316,16 @@ In this stage, raw events are transformed into high-value data through a highly 
 The project uses \textbf{TimescaleDB} (a PostgreSQL extension) as its primary storage solution:
 \begin{itemize}
     \item \textbf{Hypertables:} Event data is automatically partitioned into time-based chunks, which significantly improves query performance for large datasets.
-    \item \textbf{Continuous Aggregates:} The database automatically pre-calculates rollups (e.g., 5-minute or 1-hour statistics) in the background, allowing complex dashboard queries to load in milliseconds.
-    \TODO{Add db scheme graph}
+    \item \textbf{Continuous Aggregates:} The database automatically pre-calculates rollups (e.g., 5-minute statistics) in the background, allowing complex dashboard queries to load in milliseconds.
   \end{itemize}
+  The relational schema is organised into three groups — the core star schema
+  (Figures~\ref{fig:db-core}), the Hidden Gem snapshot tables
+  (Figure~\ref{fig:db-snapshots}), and the operational log tables
+  (Figure~\ref{fig:db-operational}) — documented in
+  Appendix~\ref{appendix:schema}.
 
 \subsection{Visualization}
-The primary platform for data analysis and system oversight is Grafana. It serves as the central visualization hub, providing a comprehensive suite of dashboards that directly query the TimescaleDB continuous aggregates and status logs. The dashboards are categorized into two main areas:
+The system provides two complementary visualisation layers. \textbf{Grafana} serves a dual purpose: its analytics dashboards (the \textit{Hidden Gem} series) provide deep-dive insights into the enriched GitHub data, while its monitoring dashboards expose pipeline health, geocoding throughput, and API request logs to operators. The \textbf{Next.js dashboard} (Section~\ref{sec:implementation}) provides the interactive, real-time analytics interface for end users, including the Hidden Gem discovery and ranking features. The Grafana dashboards are categorized into two main areas:
 
 \begin{itemize}
     \item \textbf{GitHub Data Insights (Hidden Gem Series):} These dashboards provide deep-dive analytics into the enriched GitHub data:
@@ -317,6 +345,7 @@ The primary platform for data analysis and system oversight is Grafana. It serve
 \end{itemize}
 
 \subsection{Geocoding Engine (Photon)}
+\label{sec:geocoder}
 To implement high-performance geographic enrichment of GitHub events without relying on external rate-limited services, \textbf{Photon} was integrated into the infrastructure.
 
 \begin{itemize}
@@ -334,12 +363,14 @@ To implement high-performance geographic enrichment of GitHub events without rel
 \textbf{Service} & \textbf{Function} \\ \hline
 \texttt{producer} & Polls the GitHub API and writes raw event data to Kafka. \\ \hline
 \texttt{kafka} & Central message broker used for service decoupling and buffering. \\ \hline
-\texttt{consumer} & Enriches events with user and repository metadata via the GitHub API. \\ \hline
-\texttt{geocoder} & Logic layer that coordinates location queries between the database and the engine. \\ \hline
-\texttt{photon} & \textbf{Geocoding engine that resolves location strings into geographic coordinates locally.} \\ \hline
+\texttt{kafka-ui} & Web UI (port 8080) for Kafka topic inspection and consumer-lag monitoring. \\ \hline
+\texttt{kafka-init} & One-shot service that creates Kafka topics with the correct partition counts on first start. \\ \hline
+\texttt{consumer-\{0,1,2\}} & Three parallel instances that enrich events with user and repository metadata; each is pinned to one Kafka partition. \\ \hline
+\texttt{geocoder} & Logic layer that claims unlabelled user locations from the DB and resolves them via Photon. \\ \hline
+\texttt{photon} & Local geocoding engine (OpenStreetMap/Photon) that resolves location strings to coordinates. \\ \hline
 \texttt{db-writer} & Consumes status and rate limit topics to persist operational metrics. \\ \hline
 \texttt{timescaledb} & Time-series optimized SQL database used for data storage and aggregation. \\ \hline
-\texttt{grafana} & Central visualization platform for data insights and system monitoring. \\ \hline
+\texttt{grafana} & Operational monitoring dashboards for pipeline health and system metrics. \\ \hline
 \end{tabular}
 \end{table}
 
@@ -379,17 +410,20 @@ rate limit from 60 to 5\,000 requests per hour~\cite{github-rest-api}.
 
 \subsection{Event Enrichment}
 
-The consumer (\texttt{consumer/consumer.py}) performs two enrichment passes:
+The consumer (\texttt{consumer/consumer.py}) feeds two independent batch queues
+inside an \texttt{Enricher} instance, each backed by its own GitHub token pool:
 
 \begin{enumerate}
-  \item \textbf{User-profile enrichment.} The GitHub REST API supplies each
-    actor's company name, self-reported location, public repository count,
-    and follower count. Results are cached in a dictionary for the process
-    lifetime to avoid redundant API calls.
-  \item \textbf{Geocoding.} Free-text location strings are resolved to
-    WGS-84 coordinates via Nominatim~\cite{nominatim}. A rate limiter
-    enforces the required 1\,req/s ceiling; a one-hour LRU cache avoids
-    re-geocoding identical strings.
+  \item \textbf{User/organisation-profile enrichment.} Actor usernames are
+    enqueued in a user/org batch queue (up to 20 items per GraphQL request).
+    Before enqueueing, the \texttt{Enricher} checks the database for an existing
+    row with \texttt{fetched\_at IS NOT NULL}; already-enriched actors are
+    skipped. A REST fallback handles GraphQL partial failures and 404 responses.
+  \item \textbf{Repository enrichment.} Repository IDs follow the same pattern
+    through a separate repo batch queue with its own token pool. Resolved
+    metadata (language, topics, star/fork counts) is upserted into the
+    \texttt{repos} table. Geographic enrichment of user location strings is
+    handled by the dedicated \texttt{geocoder} service (Section~\ref{sec:geocoder}).
 \end{enumerate}
 
 Enriched records are written to five normalised tables:
@@ -404,7 +438,7 @@ one-day chunks. Chunk-level columnar compression is applied after seven days
 compression ratios of 10--20$\times$ over the raw row-store~\cite{timescaledb}.
 A 90-day data retention policy bounds disk usage.
 
-Three continuous aggregates pre-compute rollups at ingest time rather
+Two continuous aggregates pre-compute rollups at ingest time rather
 than query time (Table~\ref{tab:aggregates}), keeping dashboard query
 latency below a few milliseconds even at scale.
 
@@ -417,7 +451,6 @@ latency below a few milliseconds even at scale.
     \midrule
     \texttt{event\_stats\_5m}  & 5 min & Event counts by \texttt{event\_type} \\
     \texttt{country\_ids\_5m}  & 5 min & Event counts by ISO country code \\
-    \texttt{actor\_stats\_1h}  & 1 h   & Per-actor event totals \\
     \bottomrule
   \end{tabularx}
 \end{table}
@@ -426,11 +459,11 @@ latency below a few milliseconds even at scale.
 
 The FastAPI service exposes the endpoints listed in
 Table~\ref{tab:endpoints}. The \texttt{/stream/events} endpoint implements
-the Server-Sent Events protocol~\cite{sse-spec}: it polls the
-\texttt{v\_recent\_events} database view every 3 seconds and writes
-JSON-encoded event objects to the response stream. Keep-alive comments
-(\texttt{: ping}) are sent between data frames to prevent browser and
-proxy timeouts.
+the Server-Sent Events protocol~\cite{sse-spec}: it queries the
+\texttt{events} table (joined with \texttt{repos}) every 3 seconds
+and writes JSON-encoded event objects to the response stream. An initial \texttt{: heartbeat} comment is written immediately to register
+the connection, followed by \texttt{: keep-alive} comments between data
+frames to prevent browser and proxy timeouts.
 
 \begin{table}[h]
   \caption{FastAPI endpoint reference}
@@ -439,12 +472,15 @@ proxy timeouts.
     \toprule
     \textbf{Endpoint} & \textbf{Description} \\
     \midrule
-    \texttt{GET /health}                   & Liveness check \\
-    \texttt{GET /api/kpis}                 & KPI metrics with 30-day deltas \\
-    \texttt{GET /api/commits-over-time}    & Daily commit buckets (configurable window) \\
-    \texttt{GET /api/top-repos}            & Most active repositories \\
-    \texttt{GET /api/recent-events}        & Latest ingested events \\
-    \texttt{GET /stream/events}            & SSE live stream (3\,s poll) \\
+    \texttt{GET /health}                        & Liveness check \\
+    \texttt{GET /api/kpis}                      & KPI metrics (commits, PRs, contributors, avg review time) \\
+    \texttt{GET /api/commits-over-time}         & Daily commit buckets (configurable window) \\
+    \texttt{GET /api/top-repos}                 & Most active repositories (24\,h window) \\
+    \texttt{GET /api/recent-events}             & Latest ingested events \\
+    \texttt{GET /stream/events}                 & SSE live stream (3\,s poll) \\
+    \texttt{GET /api/overview/heatmap}          & Event counts by country for choropleth map \\
+    \texttt{GET /api/overview/globe-heatmap}    & Globe-projection heatmap data \\
+    \texttt{GET /api/activity/leaderboard}      & Top actors by event count (configurable window) \\
     \bottomrule
   \end{tabularx}
 \end{table}
@@ -567,7 +603,7 @@ Section~\ref{sec:eval-hg}.
 
 \subsubsection{API Layer}
 
-Nine REST endpoints under \texttt{/api/hidden-gems/} expose the discovery engine.
+Eleven REST endpoints under \texttt{/api/hidden-gems/} expose the discovery engine.
 Live rankings (\texttt{/live}) carry a 30-second cache TTL to amortise aggregate
 query cost; filter metadata endpoints use a 5-minute TTL. A manual trigger
 endpoint (\texttt{POST /snapshots/trigger}) is restricted to administrative
@@ -600,7 +636,7 @@ The entire pipeline was hosted on a dedicated virtualized server. The system lev
 \textbf{Component} & \textbf{Specification} \\ \hline
 Hostname           & github-insights \\ \hline
 Operating System   & Ubuntu 24.04.4 LTS (Noble) \\ \hline
-Kernel             & Linux 6.17.0-20-generic (x86\_64) \\ \hline
+Kernel             & Linux 6.17.0-23-generic (x86\_64) \\ \hline
 CPU                & AMD EPYC-Milan (16 vCPUs, 16 Cores) \\ \hline
 Hypervisor         & KVM (Full Virtualization) \\ \hline
 Memory             & 31 GiB Total \\ \hline
@@ -638,11 +674,12 @@ during the evaluation period.
     \toprule
     \textbf{Metric} & \textbf{Value} & \textbf{Notes} \\
     \midrule
-    Events ingested (total)       & \TODO{N}        & Over a \TODO{T}-hour run \\
-    Average ingestion rate        & \TODO{X} ev/min & \\
-    Peak ingestion rate           & \TODO{X} ev/min & \\
-    Median end-to-end latency     & \TODO{X} s      & Poll → dashboard update \\
-    Kafka consumer lag (steady)   & \TODO{X} msgs   & Measured via Kafka-UI \\
+    Events ingested (total)       & 21{,}748{,}215  & Over the full DB time range \\
+    Average ingestion rate        & 10.7 ev/min     & Computed over full DB range \\
+    Peak ingestion rate                & 660 ev/min  & \\
+    Median API resp.\ time (GraphQL)   & 0.294\,s    & 1{,}754{,}020 requests; p95\,=\,0.668\,s \\
+    Median API resp.\ time (REST)      & 0.303\,s    & 5{,}592{,}045 requests; p95\,=\,0.551\,s \\
+    Kafka consumer lag (steady)        & 0 msgs      & All partitions at log-end offset \\
     \bottomrule
   \end{tabularx}
 \end{table}
@@ -654,25 +691,51 @@ Table~\ref{tab:coverage} shows the breadth of the data collected.
 \begin{table}[h]
   \caption{Data coverage over evaluation period}
   \label{tab:coverage}
-  \begin{tabularx}{\linewidth}{l l}
+  \begin{tabularx}{\linewidth}{l X}
     \toprule
     \textbf{Dimension} & \textbf{Value} \\
     \midrule
-    Unique repositories            & \TODO{N} \\
-    Unique contributors            & \TODO{N} \\
-    Countries represented          & \TODO{N} \\
-    Geocoding success rate         & \TODO{X}\% \\
-    Event types observed           & \TODO{list, e.g.\ PushEvent, PullRequestEvent, \ldots} \\
-    Most active programming lang.  & \TODO{language} \\
+    Unique repositories            & 5{,}367{,}217 \\
+    Unique contributors            & 3{,}963{,}190 \\
+    Countries represented          & 217 \\
+    Geocoding success rate         & 98.0\% \\
+    Event types observed           & \texttt{CommitCommentEvent}, \texttt{CreateEvent}, \texttt{DeleteEvent}, \texttt{DiscussionEvent}, \texttt{ForkEvent}, \texttt{GollumEvent}, \texttt{IssueCommentEvent}, \texttt{IssuesEvent}, \texttt{MemberEvent}, \texttt{PublicEvent}, \texttt{PullRequestEvent}, \texttt{PullRequestReviewCommentEvent}, \texttt{PullRequestReviewEvent}, \texttt{PushEvent}, \texttt{ReleaseEvent}, \texttt{WatchEvent} (16 types) \\
+    Most active programming lang.  & HTML (824{,}115 repos) \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
 \subsection{Storage Efficiency}
 
-\TODO{Report uncompressed vs.\ compressed chunk size for the
-\texttt{events} hypertable. Query:
-\texttt{SELECT * FROM chunk\_compression\_stats('events');}}
+The \texttt{events} hypertable currently spans 94 one-day chunks.
+Of these, 83 chunks (all data older than 7 days) have been compressed;
+11 recent chunks remain in uncompressed row-store format.
+Table~\ref{tab:compression} summarises the measured storage figures.
+
+\begin{table}[h]
+  \caption{events hypertable compression statistics}
+  \label{tab:compression}
+  \begin{tabularx}{\linewidth}{l r}
+    \toprule
+    \textbf{Metric} & \textbf{Value} \\
+    \midrule
+    Total chunks                    & 94 \\
+    Compressed chunks               & 83 \\
+    Uncompressed chunks (recent)    & 11 \\
+    Before compression (83 chunks)  & 12.75\,GB \\
+    After compression  (83 chunks)  &  4.43\,GB \\
+    Overall compression ratio       & 2.9$\times$ \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The 2.9$\times$ overall ratio reflects the mixed column composition:
+structured fields (\texttt{time}, \texttt{event\_type},
+\texttt{actor\_username}, \texttt{repo\_id}) compress to a small fraction
+of their original row-store size (up to 36$\times$ on table data alone),
+while the \texttt{payload} JSONB column stored in PostgreSQL TOAST is
+already partially compressed internally and benefits less from columnar
+reordering, moderating the aggregate figure.
 
 \subsection{Hidden Gem Detection Quality}
 \label{sec:eval-hg}
@@ -689,19 +752,64 @@ accessible via the \textit{Evaluation Reports} view of the frontend. Sustained
 detections are interpreted as genuine momentum signals; dropped detections
 indicate transient activity spikes.
 
-\TODO{Report cohort results for each interval (24\,h, 168\,h, 730\,h): number
-of snapshots evaluated, total repositories flagged (sig\_score\,$\geq 1.5$),
-sustained count, dropped count, and precision (sustained\,/\,total). Present as
-a three-row table. Values are directly readable from the cohort endpoint response.}
+\begin{table}[h]
+  \caption{Cohort evaluation results by time window. A repository is
+    \emph{sustained} if it re-achieves sig\_score\,$\geq 1.5$ in the immediately
+    following snapshot of the same interval; otherwise it is \emph{dropped}.
+    Precision\,=\,sustained\,/\,flagged.}
+  \label{tab:cohort}
+  \begin{tabularx}{\linewidth}{r r r r r r}
+    \toprule
+    \textbf{Window} & \textbf{Snaps.} & \textbf{Flagged} & \textbf{Sust.} & \textbf{Drop.} & \textbf{Prec.} \\
+    \midrule
+    24\,h  & 17 &  64 &  38 &  26 & 59.4\% \\
+    168\,h & 10 & 465 & 406 &  59 & 87.3\% \\
+    730\,h & 10 & 993 & 888 & 105 & 89.4\% \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
 
 \subsubsection{Representative Detections}
 
-\TODO{Present the top-5 highest-scoring repositories observed during the
-evaluation period, taken directly from the live ranking dashboard (repository
-scope, highest sig\_score across any window). For each entry report: full name,
-programming language, sig\_score, number of stars and forks accrued in the
-window, and a one-sentence description of the project. This constitutes the
-primary qualitative output of the system.}
+Table~\ref{tab:top5} lists the five repositories with the highest significance
+scores recorded across all snapshot runs. All five reached the score ceiling
+of~10, indicating a Poisson survival probability of
+$\mathrm{SF} \leq e^{-34.5} \approx 10^{-15}$ — far below the primary
+classification threshold. The score ceiling is reached by a notable fraction of
+detected repositories, meaning rank within the top tier must be broken by
+secondary criteria such as absolute star counts or window length.
+
+\begin{table*}[tp]
+  \caption{Top-5 repositories by peak significance score over the evaluation
+    period ($\Delta\!\star$ = stars accrued in window;
+    $\Delta\!\pitchfork$ = forks accrued in window).
+    All five saturate the sig\_score ceiling of~10.}
+  \label{tab:top5}
+  \small
+  \begin{tabularx}{\textwidth}{l l r r r r X}
+    \toprule
+    \textbf{Repository} & \textbf{Lang.} & \textbf{Score}
+      & $\Delta\!\star$ & $\Delta\!\pitchfork$ & \textbf{Window}
+      & \textbf{Description} \\
+    \midrule
+    \texttt{Sunefei/PatchNet}
+      & Python & 10 &  13 &  1 & 168\,h
+      & \TODO{Verify from GitHub repo page} \\
+    \texttt{warpdotdev/Warp}
+      & — & 10 & 211 & 26 & 168\,h
+      & AI-powered terminal emulator with collaborative and IDE-like features \\
+    \texttt{Anil-matcha/Open-Higgsfield-AI}
+      & JavaScript & 10 & 204 & 28 & 730\,h
+      & Open-source web interface for the Higgsfield AI cinematic video generation model \\
+    \texttt{capcom6/android-sms-gateway}
+      & Kotlin & 10 &  89 &  9 & 730\,h
+      & Self-hosted REST API gateway for sending and receiving SMS via an Android device \\
+    \texttt{Fincept-Corporation/FinceptTerminal}
+      & Python & 10 & 355 & 43 & 730\,h
+      & Terminal-based financial analytics platform for real-time market data and portfolio tracking \\
+    \bottomrule
+  \end{tabularx}
+\end{table*}
 
 \subsubsection{Score Distribution Across Snapshots}
 
@@ -755,17 +863,23 @@ an optional personal access token (raising the cap to 5\,000/h) and
 client-side deduplication that avoids re-publishing events already seen within
 the polling window.
 
-\paragraph{Geocoding throughput.}
-Nominatim enforces a strict 1\,req/s policy for fair use. We introduced an
-in-process LRU cache keyed on the normalised location string, which
-eliminated redundant lookups for common values such as ``San Francisco, CA''
-or ``Berlin, Germany''.
+\paragraph{Geocoding deduplication across consumers.}
+GitHub user location strings are free-form text, leading to many duplicates
+across events. With three concurrent consumer instances all triggering
+geocoding, naive processing would issue redundant Photon requests for the same
+location string simultaneously. We resolved this with an optimistic-locking
+claim: before forwarding a location to Photon, the geocoder sets
+\texttt{geo\_claimed\_at = NOW()} on the user row in a single
+\texttt{UPDATE \ldots WHERE geo\_claimed\_at IS NULL} statement. Concurrent
+instances racing on the same username lose the claim and skip the request,
+ensuring each location is resolved exactly once without requiring a
+distributed lock.
 
 \paragraph{Service startup ordering.}
 TimescaleDB and Kafka require 10--30 seconds after container start before
 accepting connections. Docker Compose health checks gate dependent services.
 Additionally, the FastAPI service implements an internal retry loop that
-polls the database connection every two seconds and logs progress until the
+polls the database connection every three seconds and logs progress until the
 pool is established.
 
 \paragraph{React 19 / Tremor peer dependency conflict.}
@@ -831,6 +945,21 @@ for their guidance throughout the project.
 %% ── Appendix ────────────────────────────────────────────────────────────────
 \appendix
 
+\section{Full System Architecture}
+\label{appendix:arch-full}
+
+\begin{figure*}[ht]
+  \centering
+  \includegraphics[width=\textwidth]{diagrams/system-architecture-full}
+  \caption{Full annotated system architecture diagram. All seven layers are
+    shown with explicit data-flow labels, port numbers, and service boundaries
+    of the Docker Compose stack.}
+  \Description{Full system architecture diagram showing GitHub API, Producer,
+    Kafka broker, Consumer instances, Geocoder, TimescaleDB, FastAPI, Next.js
+    frontend, and Grafana with all data-flow arrows and labels.}
+  \label{fig:arch-full}
+\end{figure*}
+
 \section{Project Timeline}
 
 \begin{table}[H]
@@ -857,31 +986,224 @@ for their guidance throughout the project.
 \section{Database Schema}
 \label{appendix:schema}
 
-\begin{table}[H]
-  \caption{Relational schema (simplified)}
-  \label{tab:schema}
-  \begin{tabularx}{\linewidth}{l l X}
-    \toprule
-    \textbf{Table} & \textbf{PK} & \textbf{Key columns} \\
-    \midrule
-    \texttt{events}  & \texttt{(time, event\_id)} &
-      \texttt{event\_type}, \texttt{actor\_username}, \texttt{repo\_id},
-      \texttt{detail}, \texttt{payload} (JSONB).
-      Hypertable: 1-day chunks; 7-day compression; 90-day retention. \\
-    \texttt{users}   & \texttt{username} &
-      \texttt{company}, \texttt{location}, \texttt{country},
-      \texttt{country\_code}, \texttt{lat}, \texttt{lng},
-      \texttt{public\_repos}, \texttt{followers}. \\
-    \texttt{repos}   & \texttt{repo\_id} &
-      \texttt{full\_name}, \texttt{language}, \texttt{topics[]},
-      \texttt{stargazers\_count}, \texttt{forks\_count}. \\
-    \texttt{organizations} & \texttt{login} &
-      \texttt{name}, \texttt{location}, \texttt{is\_verified}. \\
-    \texttt{organization\_members} & \texttt{(org\_login, user\_username)} &
-      \texttt{role}. \\
-    \bottomrule
-  \end{tabularx}
-\end{table}
+%% ── DB Schema Diagram 1: Core Star Schema ───────────────────────────────────
+\begin{figure*}[ht]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[x=1cm, y=1cm]
+
+% ── Nodes ─────────────────────────────────────────────────────────────────────
+\node[tbl] (events) at (0, 0) {%
+  \textsf{\textbf{events}}\;\textsf{\textit{\fontsize{6}{7}\selectfont(hypertable, 1-day chunks, 90\,d)}}\\[-1pt]%
+  \rule{\linewidth}{0.5pt}\\[0pt]%
+  \textbf{time} : timestamptz \quad\textbf{PK}\\%
+  \textbf{event\_id} : text \quad\textbf{PK}\\%
+  event\_type : text\\%
+  actor\_username : text\\%
+  repo\_id : integer\\%
+  detail : text\\%
+  payload : jsonb%
+};
+
+\node[tbl] (users) at (6.5, 6.5) {%
+  \textsf{\textbf{users}}\\[-1pt]%
+  \rule{\linewidth}{0.5pt}\\[0pt]%
+  \textbf{username} : text \quad\textbf{PK}\\%
+  fetched\_at, last\_active : timestamptz\\%
+  company, location : text\\%
+  country, country\_code : text\\%
+  lat, lng : float\\%
+  public\_repos, followers : int\\%
+  is\_bot : bool\\%
+  geo\_claimed\_at : timestamptz%
+};
+
+\node[tbl] (repos) at (6.5, 0) {%
+  \textsf{\textbf{repos}}\\[-1pt]%
+  \rule{\linewidth}{0.5pt}\\[0pt]%
+  \textbf{repo\_id} : integer \quad\textbf{PK}\\%
+  name, full\_name : text\\%
+  owner\_login, owner\_type : text\\%
+  language, license\_spdx : text\\%
+  topics : text[]\\%
+  stargazers\_count, forks\_count : int\\%
+  created\_at, pushed\_at : timestamptz%
+};
+
+\node[tbl] (orgs) at (13, 6.5) {%
+  \textsf{\textbf{organizations}}\\[-1pt]%
+  \rule{\linewidth}{0.5pt}\\[0pt]%
+  \textbf{login} : text \quad\textbf{PK}\\%
+  fetched\_at : timestamptz\\%
+  name, description : text\\%
+  location : text\\%
+  lat, lng : float\\%
+  is\_verified : bool\\%
+  public\_repos : int\\%
+  created\_at, geo\_claimed\_at : timestamptz%
+};
+
+\node[tbl] (orgmem) at (13, 0) {%
+  \textsf{\textbf{organization\_members}}\;\textsf{\textit{\fontsize{6}{7}\selectfont(junction)}}\\[-1pt]%
+  \rule{\linewidth}{0.5pt}\\[0pt]%
+  \textbf{org\_login} : text \quad\textbf{PK} \quad\textit{FK}\\%
+  \textbf{user\_username} : text \quad\textbf{PK} \quad\textit{FK}\\%
+  role : text%
+};
+
+% ── FK arrows ─────────────────────────────────────────────────────────────────
+\draw[fkarr] (events.north east) to[bend left=15] node[midway, right, font=\fontsize{6}{7}\selectfont\sffamily] {actor\_username} (users.south west);
+\draw[fkarr] (events.east) -- node[midway, below, font=\fontsize{6}{7}\selectfont\sffamily] {repo\_id} (repos.west);
+\draw[fkarr] (orgmem.north) -- node[midway, right, font=\fontsize{6}{7}\selectfont\sffamily] {org\_login} (orgs.south);
+\draw[fkarr] (orgmem.north west) to[bend right=15] node[midway, left, font=\fontsize{6}{7}\selectfont\sffamily] {user\_username} (users.south east);
+
+\end{tikzpicture}%
+}
+\caption{Core star schema. \texttt{events} is the central fact hypertable;
+  \texttt{users}, \texttt{repos}, and \texttt{organizations} are dimension
+  tables; \texttt{organization\_members} is a junction table with enforced
+  \texttt{REFERENCES} constraints. Dashed arrows from \texttt{events} to
+  \texttt{users} and \texttt{repos} represent logical joins (no database-level
+  FK constraint); arrows from \texttt{organization\_members} represent actual
+  \texttt{REFERENCES} constraints.}
+\Description{Entity-relationship diagram of the core star schema with five
+  tables: events (fact, hypertable), users, repos, organizations (dimensions),
+  and organization\_members (junction). Foreign key arrows connect events to
+  users and repos, and organization\_members to users and organizations.}
+\label{fig:db-core}
+\end{figure*}
+
+%% ── DB Schema Diagram 2: Hidden Gem Snapshot Tables ─────────────────────────
+\begin{figure*}[ht]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[x=1cm, y=1cm]
+
+% ── Nodes ─────────────────────────────────────────────────────────────────────
+\node[tbl] (runs) at (6.5, 7) {%
+  \textsf{\textbf{hidden\_gem\_snapshot\_runs}}\\[-1pt]%
+  \rule{\linewidth}{0.5pt}\\[0pt]%
+  \textbf{id} : serial \quad\textbf{PK}\\%
+  run\_at : timestamptz\\%
+  interval\_hours : int \quad\textit{(24 / 168 / 730)}\\%
+  alpha, beta : float\\%
+  repo\_count, user\_count, org\_count : int%
+};
+
+\node[tbl] (srepos) at (0, 0) {%
+  \textsf{\textbf{hidden\_gem\_snapshot\_repos}}\\[-1pt]%
+  \rule{\linewidth}{0.5pt}\\[0pt]%
+  \textbf{snapshot\_id} : int \quad\textbf{PK} \quad\textit{FK}\\%
+  \textbf{repo\_id} : integer \quad\textbf{PK}\\%
+  full\_name, name, owner\_login : text\\%
+  language, license\_spdx : text\\%
+  topics : text[]\\%
+  sig\_score, rank : float/int\\%
+  count\_stars\_interval, count\_forks\_interval : int\\%
+  total\_stars, total\_forks : int%
+};
+
+\node[tbl] (susers) at (6.5, 0) {%
+  \textsf{\textbf{hidden\_gem\_snapshot\_users}}\\[-1pt]%
+  \rule{\linewidth}{0.5pt}\\[0pt]%
+  \textbf{snapshot\_id} : int \quad\textbf{PK} \quad\textit{FK}\\%
+  \textbf{username} : text \quad\textbf{PK}\\%
+  total\_score, best\_repo\_score : float\\%
+  best\_repo : text\\%
+  hidden\_gem\_count : int\\%
+  active\_repos\_in\_window : int%
+};
+
+\node[tbl] (sorgs) at (13, 0) {%
+  \textsf{\textbf{hidden\_gem\_snapshot\_orgs}}\\[-1pt]%
+  \rule{\linewidth}{0.5pt}\\[0pt]%
+  \textbf{snapshot\_id} : int \quad\textbf{PK} \quad\textit{FK}\\%
+  \textbf{org\_login} : text \quad\textbf{PK}\\%
+  org\_repos\_total\_score, org\_repos\_best\_score : float\\%
+  org\_active\_repos, org\_hidden\_gem\_count : int\\%
+  member\_repos\_total\_score, member\_repos\_best\_score : float\\%
+  member\_active\_repos, member\_active\_users : int\\%
+  member\_hidden\_gem\_count : int%
+};
+
+% ── FK arrows ─────────────────────────────────────────────────────────────────
+\draw[fkarr] (srepos.north) to[bend right=20] node[midway, left, font=\fontsize{6}{7}\selectfont\sffamily] {snapshot\_id} (runs.south west);
+\draw[fkarr] (susers.north) -- node[midway, right, font=\fontsize{6}{7}\selectfont\sffamily] {snapshot\_id} (runs.south);
+\draw[fkarr] (sorgs.north) to[bend left=20] node[midway, right, font=\fontsize{6}{7}\selectfont\sffamily] {snapshot\_id} (runs.south east);
+
+\end{tikzpicture}%
+}
+\caption{Hidden Gem snapshot tables. \texttt{hidden\_gem\_snapshot\_runs}
+  is the header record for each scoring run (one per interval per
+  invocation); the three child tables store per-repo, per-user, and per-org
+  significance scores for that run.}
+\Description{Entity-relationship diagram of four snapshot tables. The
+  hidden\_gem\_snapshot\_runs table is at the top; three child tables
+  (snapshot\_repos, snapshot\_users, snapshot\_orgs) each reference it via
+  snapshot\_id foreign keys.}
+\label{fig:db-snapshots}
+\end{figure*}
+
+%% ── DB Schema Diagram 3: Operational (standalone) Tables ─────────────────────
+\begin{figure*}[ht]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[x=1cm, y=1cm]
+
+% ── Nodes ─────────────────────────────────────────────────────────────────────
+\node[tbl] (reqlogs) at (0, 0) {%
+  \textsf{\textbf{request\_logs}}\\[-1pt]%
+  \rule{\linewidth}{0.5pt}\\[0pt]%
+  \textbf{id} : serial \quad\textbf{PK}\\%
+  request\_success : bool\\%
+  sent\_at, received\_at : timestamptz\\%
+  elapsed\_s : float\\%
+  method, url : text\\%
+  status\_code, reason : int/text\\%
+  response\_bytes, redirects : int\\%
+  request\_type : text \textit{(rest/graphql)}\\%
+  batch\_size : int, token\_id : text%
+};
+
+\node[tbl] (ratelim) at (6.5, 0) {%
+  \textsf{\textbf{rate\_limit\_snapshots}}\;\textsf{\textit{\fontsize{6}{7}\selectfont(hypertable, no PK)}}\\[-1pt]%
+  \rule{\linewidth}{0.5pt}\\[0pt]%
+  id : serial\\%
+  recorded\_at : timestamptz \quad\textit{(partition key)}\\%
+  source : text \textit{(producer/consumer)}\\%
+  resource : text \textit{(core, search, \ldots)}\\%
+  limit\_ : int\\%
+  used, remaining : int\\%
+  reset\_at : timestamptz\\%
+  token\_id : text%
+};
+
+\node[tbl] (geologs) at (13, 0) {%
+  \textsf{\textbf{geocoder\_request\_logs}}\;\textsf{\textit{\fontsize{6}{7}\selectfont(hypertable)}}\\[-1pt]%
+  \rule{\linewidth}{0.5pt}\\[0pt]%
+  \textbf{recorded\_at} : timestamptz \quad\textbf{PK}\\%
+  \textbf{id} : bigserial \quad\textbf{PK}\\%
+  request\_success : bool\\%
+  sent\_at, received\_at : timestamptz\\%
+  elapsed\_s : float\\%
+  url, location\_query : text\\%
+  status\_code : int, error : text%
+};
+
+% No FK arrows — these tables are standalone
+
+\end{tikzpicture}%
+}
+\caption{Operational log tables. These three tables record HTTP request logs
+  for the GitHub REST/GraphQL API (\texttt{request\_logs}), GitHub API rate-limit
+  snapshots (\texttt{rate\_limit\_snapshots}), and Photon geocoder request logs
+  (\texttt{geocoder\_request\_logs}). They carry no foreign key references to
+  the core schema and are used exclusively for operational monitoring.}
+\Description{Three standalone table boxes shown side by side: request\_logs,
+  rate\_limit\_snapshots (hypertable), and geocoder\_request\_logs (hypertable).
+  No foreign key arrows connect them.}
+\label{fig:db-operational}
+\end{figure*}
 
 \section{Deployment Quick Reference}
 

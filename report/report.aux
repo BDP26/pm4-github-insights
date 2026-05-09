@@ -16,27 +16,27 @@
 \citation{timescaledb}
 \@writefile{toc}{\contentsline {section}{\numberline {3}System Architecture}{2}{section.3}\protected@file@percent }
 \newlabel{sec:architecture}{{3}{2}{System Architecture}{section.3}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces End-to-end architecture of the GitHub Innovation Portal. Events flow from the GitHub API through Kafka into TimescaleDB, where they are served by FastAPI to the Next.js dashboard and Grafana.}}{2}{figure.caption.5}\protected@file@percent }
-\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
-\newlabel{fig:architecture}{{1}{2}{End-to-end architecture of the GitHub Innovation Portal. Events flow from the GitHub API through Kafka into TimescaleDB, where they are served by FastAPI to the Next.js dashboard and Grafana}{figure.caption.5}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Data Ingestion (Producer)}{2}{subsection.3.1}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Message Broker (Kafka)}{2}{subsection.3.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Processing and Enrichment (Consumer \& Geocoder)}{2}{subsection.3.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Data Storage (TimescaleDB)}{2}{subsection.3.4}\protected@file@percent }
-\citation{github-rest-api}
-\citation{nominatim}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Visualization}{3}{subsection.3.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Visualization}{2}{subsection.3.5}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces End-to-end architecture of the GitHub Innovation Portal. Events flow from the GitHub API through Kafka (KRaft) into TimescaleDB, where they are served by FastAPI to the Next.js dashboard and Grafana. Dashed arrows indicate authentication and auxiliary data flows. See Appendix\nonbreakingspace \ref {appendix:arch-full} for the full annotated diagram.}}{3}{figure.caption.5}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:architecture}{{1}{3}{End-to-end architecture of the GitHub Innovation Portal. Events flow from the GitHub API through Kafka (KRaft) into TimescaleDB, where they are served by FastAPI to the Next.js dashboard and Grafana. Dashed arrows indicate authentication and auxiliary data flows. See Appendix~\ref {appendix:arch-full} for the full annotated diagram}{figure.caption.5}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.6}Geocoding Engine (Photon)}{3}{subsection.3.6}\protected@file@percent }
+\newlabel{sec:geocoder}{{3.6}{3}{Geocoding Engine (Photon)}{subsection.3.6}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Expanded System Component Overview (Docker Services)}}{3}{table.caption.6}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.7}Trending Repository Discovery}{3}{subsection.3.7}\protected@file@percent }
 \newlabel{sec:arch-hg}{{3.7}{3}{Trending Repository Discovery}{subsection.3.7}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {4}Implementation}{3}{section.4}\protected@file@percent }
-\newlabel{sec:implementation}{{4}{3}{Implementation}{section.4}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Data Ingestion}{3}{subsection.4.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Event Enrichment}{3}{subsection.4.2}\protected@file@percent }
+\citation{github-rest-api}
 \citation{timescaledb}
 \citation{sse-spec}
 \citation{nextjs}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Implementation}{4}{section.4}\protected@file@percent }
+\newlabel{sec:implementation}{{4}{4}{Implementation}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Data Ingestion}{4}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Event Enrichment}{4}{subsection.4.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Storage Layer}{4}{subsection.4.3}\protected@file@percent }
 \@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces TimescaleDB continuous aggregates}}{4}{table.caption.7}\protected@file@percent }
 \newlabel{tab:aggregates}{{2}{4}{TimescaleDB continuous aggregates}{table.caption.7}{}}
@@ -44,12 +44,12 @@
 \@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces FastAPI endpoint reference}}{4}{table.caption.8}\protected@file@percent }
 \newlabel{tab:endpoints}{{3}{4}{FastAPI endpoint reference}{table.caption.8}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Visualisation}{4}{subsection.4.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.6}Hidden Gem Scoring Engine}{4}{subsection.4.6}\protected@file@percent }
-\newlabel{sec:impl-hg}{{4.6}{4}{Hidden Gem Scoring Engine}{subsection.4.6}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.6.1}Momentum Metric}{4}{subsubsection.4.6.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.6.2}Statistical Scoring Model}{4}{subsubsection.4.6.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Expected rate.}{4}{section*.9}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Significance score.}{4}{section*.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.6}Hidden Gem Scoring Engine}{5}{subsection.4.6}\protected@file@percent }
+\newlabel{sec:impl-hg}{{4.6}{5}{Hidden Gem Scoring Engine}{subsection.4.6}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.6.1}Momentum Metric}{5}{subsubsection.4.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.6.2}Statistical Scoring Model}{5}{subsubsection.4.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Expected rate.}{5}{section*.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Significance score.}{5}{section*.10}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Noise guards.}{5}{section*.11}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {4.6.3}User and Organisation Aggregation}{5}{subsubsection.4.6.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {4.6.4}Snapshot Scheduler}{5}{subsubsection.4.6.4}\protected@file@percent }
@@ -59,16 +59,13 @@
 \zref@newlabel{mdf@pagelabel-1}{\default{5}\page{5}\abspage{5}\mdf@pagevalue{5}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Experimental Setup}{5}{subsection.5.1}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {5.1.1}Hardware and Operating System}{5}{subsubsection.5.1.1}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces System Specifications}}{5}{table.caption.12}\protected@file@percent }
-\newlabel{tab:system_specs}{{4}{5}{System Specifications}{table.caption.12}{}}
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {5.1.2}Software Environment and Containerization}{5}{subsubsection.5.1.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.1.3}Pipeline Configuration}{5}{subsubsection.5.1.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Throughput and Latency}{5}{subsection.5.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Data Coverage and Enrichment Quality}{5}{subsection.5.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Storage Efficiency}{5}{subsection.5.4}\protected@file@percent }
-\citation{kafka}
-\citation{timescaledb}
-\citation{fastapi}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces System Specifications}}{6}{table.caption.12}\protected@file@percent }
+\newlabel{tab:system_specs}{{4}{6}{System Specifications}{table.caption.12}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.1.3}Pipeline Configuration}{6}{subsubsection.5.1.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Throughput and Latency}{6}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Data Coverage and Enrichment Quality}{6}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Storage Efficiency}{6}{subsection.5.4}\protected@file@percent }
 \@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Pipeline throughput and latency metrics}}{6}{table.caption.13}\protected@file@percent }
 \newlabel{tab:throughput}{{5}{6}{Pipeline throughput and latency metrics}{table.caption.13}{}}
 \@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Data coverage over evaluation period}}{6}{table.caption.14}\protected@file@percent }
@@ -76,20 +73,30 @@
 \@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Hidden Gem Detection Quality}{6}{subsection.5.5}\protected@file@percent }
 \newlabel{sec:eval-hg}{{5.5}{6}{Hidden Gem Detection Quality}{subsection.5.5}{}}
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {5.5.1}Cohort Analysis Methodology}{6}{subsubsection.5.5.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.5.2}Representative Detections}{6}{subsubsection.5.5.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.5.3}Score Distribution Across Snapshots}{6}{subsubsection.5.5.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {6}Technology Decision Rationale}{6}{section.6}\protected@file@percent }
-\newlabel{sec:decisions}{{6}{6}{Technology Decision Rationale}{section.6}{}}
-\@writefile{toc}{\contentsline {paragraph}{Apache Kafka.}{6}{section*.15}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{TimescaleDB over plain PostgreSQL.}{6}{section*.16}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{FastAPI over Flask/Django.}{6}{section*.17}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Next.js 16 (App Router).}{6}{section*.18}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {7}Challenges and Solutions}{6}{section.7}\protected@file@percent }
-\newlabel{sec:challenges}{{7}{6}{Challenges and Solutions}{section.7}{}}
-\@writefile{toc}{\contentsline {paragraph}{GitHub API rate limiting.}{6}{section*.19}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Geocoding throughput.}{6}{section*.20}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Service startup ordering.}{6}{section*.21}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{React 19 / Tremor peer dependency conflict.}{6}{section*.22}\protected@file@percent }
+\citation{kafka}
+\citation{timescaledb}
+\citation{fastapi}
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces events hypertable compression statistics}}{7}{table.caption.15}\protected@file@percent }
+\newlabel{tab:compression}{{7}{7}{events hypertable compression statistics}{table.caption.15}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Cohort evaluation results by time window. A repository is \emph  {sustained} if it re-achieves sig\_score\,$\geq 1.5$ in the immediately following snapshot of the same interval; otherwise it is \emph  {dropped}. Precision\,=\,sustained\,/\,flagged.}}{7}{table.caption.16}\protected@file@percent }
+\newlabel{tab:cohort}{{8}{7}{Cohort evaluation results by time window. A repository is \emph {sustained} if it re-achieves sig\_score\,$\geq 1.5$ in the immediately following snapshot of the same interval; otherwise it is \emph {dropped}. Precision\,=\,sustained\,/\,flagged}{table.caption.16}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.5.2}Representative Detections}{7}{subsubsection.5.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.5.3}Score Distribution Across Snapshots}{7}{subsubsection.5.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Technology Decision Rationale}{7}{section.6}\protected@file@percent }
+\newlabel{sec:decisions}{{6}{7}{Technology Decision Rationale}{section.6}{}}
+\@writefile{toc}{\contentsline {paragraph}{Apache Kafka.}{7}{section*.18}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{TimescaleDB over plain PostgreSQL.}{7}{section*.19}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{FastAPI over Flask/Django.}{7}{section*.20}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Next.js 16 (App Router).}{7}{section*.21}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}Challenges and Solutions}{7}{section.7}\protected@file@percent }
+\newlabel{sec:challenges}{{7}{7}{Challenges and Solutions}{section.7}{}}
+\@writefile{toc}{\contentsline {paragraph}{GitHub API rate limiting.}{7}{section*.22}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Geocoding deduplication across consumers.}{7}{section*.23}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Service startup ordering.}{7}{section*.24}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{React 19 / Tremor peer dependency conflict.}{7}{section*.25}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{\textcolor {orange!80!black}{\textbf  {[TODO: Additional challenges.]}}}{7}{section*.26}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Conclusion and Future Work}{7}{section.8}\protected@file@percent }
+\newlabel{sec:conclusion}{{8}{7}{Conclusion and Future Work}{section.8}{}}
 \bibstyle{ACM-Reference-Format}
 \bibdata{references}
 \bibcite{kafka}{{1}{2025}{{Apache Software Foundation}}{{}}}
@@ -100,29 +107,35 @@
 \bibcite{kreps2014question}{{6}{2014}{{Kreps}}{{}}}
 \bibcite{lamarque2022github}{{7}{2022}{{Lamarque et~al\mbox  {.}}}{{}}}
 \bibcite{marz2015big}{{8}{2015}{{Marz and Warren}}{{}}}
-\bibcite{nominatim}{{9}{2025}{{OpenStreetMap contributors}}{{}}}
-\bibcite{fastapi}{{10}{2025}{{Ram\'irez}}{{}}}
-\bibcite{timescaledb}{{11}{2025}{{Timescale, Inc.}}{{}}}
-\bibcite{nextjs}{{12}{2025}{{Vercel, Inc.}}{{}}}
-\@writefile{toc}{\contentsline {paragraph}{\textcolor {orange!80!black}{\textbf  {[TODO: Additional challenges.]}}}{7}{section*.23}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {8}Conclusion and Future Work}{7}{section.8}\protected@file@percent }
-\newlabel{sec:conclusion}{{8}{7}{Conclusion and Future Work}{section.8}{}}
-\@writefile{toc}{\contentsline {section}{Acknowledgments}{7}{section*.25}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{References}{7}{section*.27}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {A}Project Timeline}{7}{appendix.A}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Actual project timeline and task allocation}}{7}{table.caption.28}\protected@file@percent }
-\newlabel{tab:timeline}{{7}{7}{Actual project timeline and task allocation}{table.caption.28}{}}
+\bibcite{fastapi}{{9}{2025}{{Ram\'irez}}{{}}}
+\bibcite{timescaledb}{{10}{2025}{{Timescale, Inc.}}{{}}}
+\bibcite{nextjs}{{11}{2025}{{Vercel, Inc.}}{{}}}
+\@writefile{lot}{\contentsline {table}{\numberline {9}{\ignorespaces Top-5 repositories by peak significance score over the evaluation period ($\Delta \!\star $ = stars accrued in window; $\Delta \!\pitchfork $ = forks accrued in window). All five saturate the sig\_score ceiling of\nonbreakingspace 10.}}{8}{table.caption.17}\protected@file@percent }
+\newlabel{tab:top5}{{9}{8}{Top-5 repositories by peak significance score over the evaluation period ($\Delta \!\star $ = stars accrued in window; $\Delta \!\pitchfork $ = forks accrued in window). All five saturate the sig\_score ceiling of~10}{table.caption.17}{}}
+\@writefile{toc}{\contentsline {section}{Acknowledgments}{8}{section*.28}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{References}{8}{section*.30}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {A}Full System Architecture}{8}{appendix.A}\protected@file@percent }
+\newlabel{appendix:arch-full}{{A}{8}{Full System Architecture}{appendix.A}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {B}Project Timeline}{8}{appendix.B}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {10}{\ignorespaces Actual project timeline and task allocation}}{8}{table.caption.32}\protected@file@percent }
+\newlabel{tab:timeline}{{10}{8}{Actual project timeline and task allocation}{table.caption.32}{}}
 \newlabel{tocindent-1}{0pt}
 \newlabel{tocindent0}{0pt}
-\newlabel{tocindent1}{6.25499pt}
+\newlabel{tocindent1}{6.30899pt}
 \newlabel{tocindent2}{10.34999pt}
 \newlabel{tocindent3}{18.198pt}
 \newlabel{tocindent4}{18.198pt}
 \newlabel{tocindent5}{0pt}
-\@writefile{toc}{\contentsline {section}{\numberline {B}Database Schema}{8}{appendix.B}\protected@file@percent }
-\newlabel{appendix:schema}{{B}{8}{Database Schema}{appendix.B}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Relational schema (simplified)}}{8}{table.caption.29}\protected@file@percent }
-\newlabel{tab:schema}{{8}{8}{Relational schema (simplified)}{table.caption.29}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {C}Deployment Quick Reference}{8}{appendix.C}\protected@file@percent }
-\newlabel{TotPages}{{8}{8}{}{page.8}{}}
-\gdef \@abspage@last{8}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Full annotated system architecture diagram. All seven layers are shown with explicit data-flow labels, port numbers, and service boundaries of the Docker Compose stack.}}{9}{figure.caption.31}\protected@file@percent }
+\newlabel{fig:arch-full}{{2}{9}{Full annotated system architecture diagram. All seven layers are shown with explicit data-flow labels, port numbers, and service boundaries of the Docker Compose stack}{figure.caption.31}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {C}Database Schema}{9}{appendix.C}\protected@file@percent }
+\newlabel{appendix:schema}{{C}{9}{Database Schema}{appendix.C}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {D}Deployment Quick Reference}{9}{appendix.D}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Core star schema. \texttt  {events} is the central fact hypertable; \texttt  {users}, \texttt  {repos}, and \texttt  {organizations} are dimension tables; \texttt  {organization\_members} is a junction table with enforced \texttt  {REFERENCES} constraints. Dashed arrows from \texttt  {events} to \texttt  {users} and \texttt  {repos} represent logical joins (no database-level FK constraint); arrows from \texttt  {organization\_members} represent actual \texttt  {REFERENCES} constraints.}}{10}{figure.caption.33}\protected@file@percent }
+\newlabel{fig:db-core}{{3}{10}{Core star schema. \texttt {events} is the central fact hypertable; \texttt {users}, \texttt {repos}, and \texttt {organizations} are dimension tables; \texttt {organization\_members} is a junction table with enforced \texttt {REFERENCES} constraints. Dashed arrows from \texttt {events} to \texttt {users} and \texttt {repos} represent logical joins (no database-level FK constraint); arrows from \texttt {organization\_members} represent actual \texttt {REFERENCES} constraints}{figure.caption.33}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Hidden Gem snapshot tables. \texttt  {hidden\_gem\_snapshot\_runs} is the header record for each scoring run (one per interval per invocation); the three child tables store per-repo, per-user, and per-org significance scores for that run.}}{11}{figure.caption.34}\protected@file@percent }
+\newlabel{fig:db-snapshots}{{4}{11}{Hidden Gem snapshot tables. \texttt {hidden\_gem\_snapshot\_runs} is the header record for each scoring run (one per interval per invocation); the three child tables store per-repo, per-user, and per-org significance scores for that run}{figure.caption.34}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Operational log tables. These three tables record HTTP request logs for the GitHub REST/GraphQL API (\texttt  {request\_logs}), GitHub API rate-limit snapshots (\texttt  {rate\_limit\_snapshots}), and Photon geocoder request logs (\texttt  {geocoder\_request\_logs}). They carry no foreign key references to the core schema and are used exclusively for operational monitoring.}}{11}{figure.caption.35}\protected@file@percent }
+\newlabel{fig:db-operational}{{5}{11}{Operational log tables. These three tables record HTTP request logs for the GitHub REST/GraphQL API (\texttt {request\_logs}), GitHub API rate-limit snapshots (\texttt {rate\_limit\_snapshots}), and Photon geocoder request logs (\texttt {geocoder\_request\_logs}). They carry no foreign key references to the core schema and are used exclusively for operational monitoring}{figure.caption.35}{}}
+\newlabel{TotPages}{{11}{11}{}{page.11}{}}
+\gdef \@abspage@last{11}
