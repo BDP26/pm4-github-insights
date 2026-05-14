@@ -250,7 +250,7 @@ tools.
 
 Figure~\ref{fig:architecture} shows the end-to-end architecture: a streaming pipeline designed to continuously ingest, enrich, and expose GitHub event data. Individual components are decoupled through a message broker to allow independent scaling and failure isolation. Table~\ref{tab:services} lists all Docker Compose services.
 
-\begin{table}[h]
+\begin{table}[ht]
   \caption{Docker Compose services and their roles}
   \label{tab:services}
   \begin{tabularx}{\linewidth}{l X}
@@ -411,7 +411,7 @@ Two continuous aggregates pre-compute rollups at ingest time rather
 than query time (Table~\ref{tab:aggregates}), reducing query latency for
 time-range aggregations compared to scanning the raw hypertable.
 
-\begin{table}[h]
+\begin{table}[ht]
   \caption{TimescaleDB continuous aggregates}
   \label{tab:aggregates}
   \begin{tabularx}{\linewidth}{l l X}
@@ -434,7 +434,7 @@ and writes JSON-encoded event objects to the response stream. An initial \texttt
 the connection, followed by \texttt{: keep-alive} comments between data
 frames to prevent browser and proxy timeouts.
 
-\begin{table}[h]
+\begin{table}[ht]
   \caption{FastAPI endpoint reference}
   \label{tab:endpoints}
   \begin{tabularx}{\linewidth}{l X}
@@ -592,7 +592,7 @@ regular schedule.
 \subsubsection{Hardware and Operating System}
 The entire pipeline was hosted on a dedicated virtualised server running Ubuntu~24.04.4~LTS. System specifications are listed in Table~\ref{tab:system_specs}.
 
-\begin{table}[h]
+\begin{table}[ht]
   \caption{Evaluation server specifications}
   \label{tab:system_specs}
   \begin{tabularx}{\linewidth}{l X}
@@ -635,7 +635,7 @@ the consumer to the GitHub GraphQL and REST endpoints for enrichment; they do
 not represent end-to-end pipeline latency from event publication to dashboard
 display.
 
-\begin{table}[h]
+\begin{table}[ht]
   \caption{Pipeline throughput and GitHub API response times}
   \label{tab:throughput}
   \begin{tabularx}{\linewidth}{l l X}
@@ -658,7 +658,7 @@ Table~\ref{tab:coverage} summarises the breadth of data collected over the full
 evaluation period; all values were obtained by querying the production database
 at the end of the run.
 
-\begin{table}[h]
+\begin{table}[ht]
   \caption{Data coverage over evaluation period}
   \label{tab:coverage}
   \begin{tabularx}{\linewidth}{l X}
@@ -689,7 +689,7 @@ Of these, 83 chunks (all data older than 7 days) have been compressed;
 11 recent chunks remain in uncompressed row-store format.
 Table~\ref{tab:compression} summarises the measured storage figures.
 
-\begin{table}[h]
+\begin{table}[ht]
   \caption{events hypertable compression statistics}
   \label{tab:compression}
   \begin{tabularx}{\linewidth}{l r}
@@ -732,7 +732,7 @@ model. This methodology is implemented in the
 detections are interpreted as genuine momentum signals; dropped detections
 indicate transient activity spikes.
 
-\begin{table}[h]
+\begin{table}[ht]
   \caption{Cohort evaluation results by time window. \emph{Flagged} = all
     repositories with a non-null score in the snapshot run; \emph{Sustained} =
     sig\_score\,$\geq 1.5$ in the next same-interval snapshot;
@@ -773,7 +773,7 @@ Fewer than 10\% of scored entries in any window reach sig\_score\,$\geq 3.0$
 repositories motivates the sustained-trend analysis presented in
 Section~\ref{sec:eval-hg-sustained}.
 
-\begin{table}[h]
+\begin{table}[ht]
   \caption{sig\_score distribution across all snapshot runs, by time window.
     Statistics over all (repository,\,run) pairs with a non-null score.
     \emph{Scored} = unique repositories with at least one non-null score.}
@@ -1058,8 +1058,8 @@ ZHAW School of Engineering) for their guidance throughout the project.
 \node[tbl] (orgmem) at (13, 0) {%
   \textsf{\textbf{organization\_members}}\;\textsf{\textit{\fontsize{6}{7}\selectfont(junction)}}\\[-1pt]%
   \rule{\linewidth}{0.5pt}\\[0pt]%
-  \textbf{org\_login} : text \quad\textbf{PK} \quad\textit{FK}\\%
-  \textbf{user\_username} : text \quad\textbf{PK} \quad\textit{FK}\\%
+  \textbf{org\_login} : text \quad\textbf{PK} \quad\textsf{\textit{FK}}\\%
+  \textbf{user\_username} : text \quad\textbf{PK} \quad\textsf{\textit{FK}}\\%
   role : text%
 };
 
@@ -1097,7 +1097,7 @@ ZHAW School of Engineering) for their guidance throughout the project.
   \rule{\linewidth}{0.5pt}\\[0pt]%
   \textbf{id} : serial \quad\textbf{PK}\\%
   run\_at : timestamptz\\%
-  interval\_hours : int \quad\textit{(24 / 168 / 730)}\\%
+  interval\_hours : int \quad\textsf{\textit{(24 / 168 / 730)}}\\%
   alpha, beta : float\\%
   repo\_count, user\_count, org\_count : int%
 };
@@ -1105,7 +1105,7 @@ ZHAW School of Engineering) for their guidance throughout the project.
 \node[tbl] (srepos) at (0, 0) {%
   \textsf{\textbf{hidden\_gem\_snapshot\_repos}}\\[-1pt]%
   \rule{\linewidth}{0.5pt}\\[0pt]%
-  \textbf{snapshot\_id} : int \quad\textbf{PK} \quad\textit{FK}\\%
+  \textbf{snapshot\_id} : int \quad\textbf{PK} \quad\textsf{\textit{FK}}\\%
   \textbf{repo\_id} : integer \quad\textbf{PK}\\%
   full\_name, name, owner\_login : text\\%
   language, license\_spdx : text\\%
@@ -1118,7 +1118,7 @@ ZHAW School of Engineering) for their guidance throughout the project.
 \node[tbl] (susers) at (6.5, 0) {%
   \textsf{\textbf{hidden\_gem\_snapshot\_users}}\\[-1pt]%
   \rule{\linewidth}{0.5pt}\\[0pt]%
-  \textbf{snapshot\_id} : int \quad\textbf{PK} \quad\textit{FK}\\%
+  \textbf{snapshot\_id} : int \quad\textbf{PK} \quad\textsf{\textit{FK}}\\%
   \textbf{username} : text \quad\textbf{PK}\\%
   total\_score, best\_repo\_score : float\\%
   best\_repo : text\\%
@@ -1129,7 +1129,7 @@ ZHAW School of Engineering) for their guidance throughout the project.
 \node[tbl] (sorgs) at (13, 0) {%
   \textsf{\textbf{hidden\_gem\_snapshot\_orgs}}\\[-1pt]%
   \rule{\linewidth}{0.5pt}\\[0pt]%
-  \textbf{snapshot\_id} : int \quad\textbf{PK} \quad\textit{FK}\\%
+  \textbf{snapshot\_id} : int \quad\textbf{PK} \quad\textsf{\textit{FK}}\\%
   \textbf{org\_login} : text \quad\textbf{PK}\\%
   org\_repos\_total\_score, org\_repos\_best\_score : float\\%
   org\_active\_repos, org\_hidden\_gem\_count : int\\%
@@ -1173,7 +1173,7 @@ ZHAW School of Engineering) for their guidance throughout the project.
   method, url : text\\%
   status\_code, reason : int/text\\%
   response\_bytes, redirects : int\\%
-  request\_type : text \textit{(rest/graphql)}\\%
+  request\_type : text \textsf{\textit{(rest/graphql)}}\\%
   batch\_size : int, token\_id : text%
 };
 
@@ -1181,9 +1181,9 @@ ZHAW School of Engineering) for their guidance throughout the project.
   \textsf{\textbf{rate\_limit\_snapshots}}\;\textsf{\textit{\fontsize{6}{7}\selectfont(hypertable, no PK)}}\\[-1pt]%
   \rule{\linewidth}{0.5pt}\\[0pt]%
   id : serial\\%
-  recorded\_at : timestamptz \quad\textit{(partition key)}\\%
-  source : text \textit{(producer/consumer)}\\%
-  resource : text \textit{(core, search, \ldots)}\\%
+  recorded\_at : timestamptz \quad\textsf{\textit{(partition key)}}\\%
+  source : text \textsf{\textit{(producer/consumer)}}\\%
+  resource : text \textsf{\textit{(core, search, \ldots)}}\\%
   limit\_ : int\\%
   used, remaining : int\\%
   reset\_at : timestamptz\\%
