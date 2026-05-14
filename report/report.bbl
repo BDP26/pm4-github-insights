@@ -38,11 +38,9 @@
 
 \bibitem[{Apache Software Foundation}(2025)]%
         {kafka}
-\bibfield{author}{\bibinfo{person}{{Apache Software Foundation}}.}
-  \bibinfo{year}{2025}\natexlab{}.
+\bibfield{author}{\bibinfo{person}{{Apache Software Foundation}}.} \bibinfo{year}{2025}\natexlab{}.
 \newblock \bibinfo{title}{{Apache Kafka} Documentation}.
-\newblock
-  \bibinfo{howpublished}{\url{https://kafka.apache.org/documentation/}}.
+\newblock \bibinfo{howpublished}{\url{https://kafka.apache.org/documentation/}}.
 \newblock
 \newblock
 \shownote{Accessed: March 2025}.
@@ -50,8 +48,7 @@
 
 \bibitem[{GitHub, Inc.}(2025)]%
         {github-rest-api}
-\bibfield{author}{\bibinfo{person}{{GitHub, Inc.}}}
-  \bibinfo{year}{2025}\natexlab{}.
+\bibfield{author}{\bibinfo{person}{{GitHub, Inc.}}} \bibinfo{year}{2025}\natexlab{}.
 \newblock \bibinfo{title}{{GitHub REST API} Documentation}.
 \newblock \bibinfo{howpublished}{\url{https://docs.github.com/en/rest}}.
 \newblock
@@ -61,8 +58,7 @@
 
 \bibitem[Gousios(2013)]%
         {ghtorrent}
-\bibfield{author}{\bibinfo{person}{Georgios Gousios}.}
-  \bibinfo{year}{2013}\natexlab{}.
+\bibfield{author}{\bibinfo{person}{Georgios Gousios}.} \bibinfo{year}{2013}\natexlab{}.
 \newblock \bibinfo{title}{The {GHTorrent} dataset and tool suite}.
 \newblock \bibinfo{howpublished}{\url{https://www.ghtorrent.org/}}.
 \newblock
@@ -72,11 +68,9 @@
 
 \bibitem[{Grafana Labs}(2025)]%
         {grafana}
-\bibfield{author}{\bibinfo{person}{{Grafana Labs}}.}
-  \bibinfo{year}{2025}\natexlab{}.
+\bibfield{author}{\bibinfo{person}{{Grafana Labs}}.} \bibinfo{year}{2025}\natexlab{}.
 \newblock \bibinfo{title}{{Grafana} Documentation}.
-\newblock
-  \bibinfo{howpublished}{\url{https://grafana.com/docs/grafana/latest/}}.
+\newblock \bibinfo{howpublished}{\url{https://grafana.com/docs/grafana/latest/}}.
 \newblock
 \newblock
 \shownote{Accessed: March 2025}.
@@ -84,11 +78,8 @@
 
 \bibitem[Grigorik(2012)]%
         {gharchive}
-\bibfield{author}{\bibinfo{person}{Ilya Grigorik}.}
-  \bibinfo{year}{2012}\natexlab{}.
-\newblock \bibinfo{title}{{GH Archive} --- a project to record the public
-  {GitHub} timeline, archive it, and make it easily accessible for further
-  analysis}.
+\bibfield{author}{\bibinfo{person}{Ilya Grigorik}.} \bibinfo{year}{2012}\natexlab{}.
+\newblock \bibinfo{title}{{GH Archive} --- a project to record the public {GitHub} timeline, archive it, and make it easily accessible for further analysis}.
 \newblock \bibinfo{howpublished}{\url{https://www.gharchive.org/}}.
 \newblock
 \newblock
@@ -97,8 +88,7 @@
 
 \bibitem[Hickson(2015)]%
         {sse-spec}
-\bibfield{author}{\bibinfo{person}{Ian Hickson}.}
-  \bibinfo{year}{2015}\natexlab{}.
+\bibfield{author}{\bibinfo{person}{Ian Hickson}.} \bibinfo{year}{2015}\natexlab{}.
 \newblock \bibinfo{title}{Server-Sent Events --- {W3C} Recommendation}.
 \newblock \bibinfo{howpublished}{\url{https://www.w3.org/TR/eventsource/}}.
 \newblock
@@ -108,23 +98,17 @@
 
 \bibitem[Lamarque et~al\mbox{.}(2022)]%
         {lamarque2022github}
-\bibfield{author}{\bibinfo{person}{Filipe Lamarque} {et~al\mbox{.}}}
-  \bibinfo{year}{2022}\natexlab{}.
-\newblock \showarticletitle{An analysis of {GitHub} ecosystem using {GH
-  Archive} data}.
-\newblock \bibinfo{journal}{\emph{Empirical Software Engineering}}
-  \bibinfo{volume}{27}, \bibinfo{number}{4} (\bibinfo{year}{2022}),
-  \bibinfo{pages}{1--34}.
+\bibfield{author}{\bibinfo{person}{Filipe Lamarque} {et~al\mbox{.}}} \bibinfo{year}{2022}\natexlab{}.
+\newblock \showarticletitle{An analysis of {GitHub} ecosystem using {GH Archive} data}.
+\newblock \bibinfo{journal}{\emph{Empirical Software Engineering}} \bibinfo{volume}{27}, \bibinfo{number}{4} (\bibinfo{year}{2022}), \bibinfo{pages}{1--34}.
 \newblock
 
 
 \bibitem[{OpenStreetMap contributors}(2025)]%
         {nominatim}
-\bibfield{author}{\bibinfo{person}{{OpenStreetMap contributors}}.}
-  \bibinfo{year}{2025}\natexlab{}.
+\bibfield{author}{\bibinfo{person}{{OpenStreetMap contributors}}.} \bibinfo{year}{2025}\natexlab{}.
 \newblock \bibinfo{title}{Nominatim Search {API} Documentation}.
-\newblock
-  \bibinfo{howpublished}{\url{https://nominatim.org/release-docs/latest/api/Search/}}.
+\newblock \bibinfo{howpublished}{\url{https://nominatim.org/release-docs/latest/api/Search/}}.
 \newblock
 \newblock
 \shownote{Accessed: March 2025}.
@@ -132,8 +116,7 @@
 
 \bibitem[Ram\'irez(2025)]%
         {fastapi}
-\bibfield{author}{\bibinfo{person}{Sebasti\'an Ram\'irez}.}
-  \bibinfo{year}{2025}\natexlab{}.
+\bibfield{author}{\bibinfo{person}{Sebasti\'an Ram\'irez}.} \bibinfo{year}{2025}\natexlab{}.
 \newblock \bibinfo{title}{{FastAPI} Documentation}.
 \newblock \bibinfo{howpublished}{\url{https://fastapi.tiangolo.com/}}.
 \newblock
@@ -143,8 +126,7 @@
 
 \bibitem[{Timescale, Inc.}(2025)]%
         {timescaledb}
-\bibfield{author}{\bibinfo{person}{{Timescale, Inc.}}}
-  \bibinfo{year}{2025}\natexlab{}.
+\bibfield{author}{\bibinfo{person}{{Timescale, Inc.}}} \bibinfo{year}{2025}\natexlab{}.
 \newblock \bibinfo{title}{{TimescaleDB} Documentation}.
 \newblock \bibinfo{howpublished}{\url{https://docs.timescale.com/}}.
 \newblock
@@ -154,8 +136,7 @@
 
 \bibitem[{Vercel, Inc.}(2025)]%
         {nextjs}
-\bibfield{author}{\bibinfo{person}{{Vercel, Inc.}}}
-  \bibinfo{year}{2025}\natexlab{}.
+\bibfield{author}{\bibinfo{person}{{Vercel, Inc.}}} \bibinfo{year}{2025}\natexlab{}.
 \newblock \bibinfo{title}{{Next.js} Documentation}.
 \newblock \bibinfo{howpublished}{\url{https://nextjs.org/docs}}.
 \newblock
