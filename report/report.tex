@@ -167,8 +167,8 @@ scouts this volume presents a paradox: the very richness of the signal makes
 it practically impossible to manually track emerging projects before they
 appear in mainstream media.
 
-Existing discovery mechanisms rely on lagging indicators --- stars accumulated
-over weeks, blog posts, or curated lists --- rather than on the raw momentum
+Existing discovery mechanisms rely on lagging indicators (stars accumulated
+over weeks, blog posts, or curated lists) rather than on the raw momentum
 visible in the live event stream. A repository that doubles its commit
 frequency or attracts contributors from three continents in a single day
 represents a signal of genuine innovation; today that signal is largely wasted.
@@ -191,6 +191,20 @@ Section~\ref{sec:evaluation} presents evaluation results.
 Section~\ref{sec:decisions} justifies the technology choices.
 Section~\ref{sec:challenges} discusses challenges encountered.
 Section~\ref{sec:conclusion} concludes with lessons learned and future work.
+
+\paragraph{Use of generative AI.}
+\textit{Claude Sonnet~4.6}~\cite{claude-sonnet-4-6} (Anthropic, 2026) was
+used as a supporting tool during the preparation of this report. The model
+served as an aid for structuring the report outline, paraphrasing text
+passages, and reviewing the report for consistency. The critical dialogue with
+the model helped sharpen the argumentation and exposed limitations in
+generated suggestions, for example in the precise formulation of statistical
+claims, which required careful verification against the underlying
+implementation. This process fostered a more reflective approach to the
+presentation of technical results. The AI system did not contribute to the
+system design, implementation, or evaluation; all substantive results are the
+authors' own. A full listing of purposes is provided in the Generative AI
+Tool Directory at the end of this paper.
 
 %% ── 2. Related Work ─────────────────────────────────────────────────────────
 \section{Related Work}
@@ -223,7 +237,7 @@ read-only services exist but provide no ingest or enrichment capabilities. The
 Hidden Gem engine introduced in this work applies a Poisson significance test
 that normalises observed growth against each repository's historical baseline,
 enabling statistically grounded comparison across repositories of different ages
-and popularity levels — a distinction not found in existing publicly documented
+and popularity levels, a distinction not found in existing publicly documented
 tools.
 
 %% ── 3. System Architecture ──────────────────────────────────────────────────
@@ -306,10 +320,10 @@ The project uses \textbf{TimescaleDB}~\cite{timescaledb}, an open-source time-se
     \item \textbf{Hypertables:} The \texttt{events} table is declared as a hypertable and automatically partitioned into time-based chunks of one day each. Chunks older than seven days are compressed using columnar storage, reducing storage requirements significantly (see Section~\ref{sec:evaluation}).
     \item \textbf{Continuous Aggregates:} Two pre-computed rollup views (5-minute event counts and country-code counts) materialise at ingest time, reducing query latency for time-range aggregations compared to scanning the full hypertable.
   \end{itemize}
-  The relational schema is organised into three groups — the core star schema
+  The relational schema is organised into three groups: the core star schema
   (Figures~\ref{fig:db-core}), the Hidden Gem snapshot tables
   (Figure~\ref{fig:db-snapshots}), and the operational log tables
-  (Figure~\ref{fig:db-operational}) — documented in
+  (Figure~\ref{fig:db-operational}), all documented in
   Appendix~\ref{appendix:schema}.
 
 \subsection{Visualisation}
@@ -724,7 +738,7 @@ evaluation approach. Each repository receiving a non-null significance score in
 snapshot run $i$ is classified as \emph{sustained} if it achieves
 sig\_score\,$\geq 1.5$ in the immediately following snapshot of the same interval;
 otherwise it is classified as \emph{dropped}. The threshold of 1.5 is the
-persistence criterion used by the system—below the primary hidden-gem boundary
+persistence criterion used by the system, below the primary hidden-gem boundary
 of 3.0 but still indicating activity that deviates statistically from the null
 model. This methodology is implemented in the
 \texttt{/api/hidden-gems/snapshots/\{id\}/cohort} endpoint and exposed in the
@@ -826,7 +840,7 @@ algorithm flagged on the most distinct calendar days with sig\_score\,$\geq 3.0$
       & \textbf{Active period} & \textbf{Description} \\
     \midrule
     \texttt{forrestchang/andrej-karpathy-skills}
-      & — & 9 & 6.04 & Apr~12–26
+      & -- & 9 & 6.04 & Apr~12--26
       & Community-maintained guide to technical skills and learning resources
         inspired by AI researcher Andrej Karpathy \\
     \texttt{NousResearch/hermes-agent}
@@ -887,7 +901,7 @@ significantly.
 
 \paragraph{GitHub API rate limiting.}
 Without authentication, the REST API caps unauthenticated requests at
-60 per hour --- insufficient for continuous polling. We mitigated this with
+60 per hour, which is insufficient for continuous polling. We mitigated this with
 an optional personal access token (raising the cap to 5\,000/h) and
 client-side deduplication that avoids re-publishing events already seen within
 the polling window.
@@ -958,6 +972,19 @@ ZHAW School of Engineering) for their guidance throughout the project.
 %% ── Bibliography ────────────────────────────────────────────────────────────
 \bibliographystyle{ACM-Reference-Format}
 \bibliography{references}
+
+%% ── Generative AI Tool Directory (ZHAW Deklarationspflicht, Ziff. 3.II) ─────
+\section*{Generative AI Tool Directory}
+
+\noindent
+Anthropic. (2026). \textit{Claude Sonnet~4.6}
+(Version \texttt{claude-sonnet-4-6}).
+\url{https://www.anthropic.com/claude}
+\begin{itemize}
+  \item Paraphrasing of text passages
+  \item Structural guidance for the report outline
+  \item Review and debugging of the report document
+\end{itemize}
 
 %% ── Appendix ────────────────────────────────────────────────────────────────
 \appendix
