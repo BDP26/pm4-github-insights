@@ -62,7 +62,7 @@
     \draw[edge_style] (GH.east) -- node[edge_label] {GET /events} (Prod.west);
 
     % GraphQL Call: Consumer -> GitHub API (angepasste Breite auf X=16 und Höhe Y=8.5)
-    \draw[edge_style, dashed, rounded corners=8pt] (Cons.north) -- (16, 2) -- (14, 2) -- node[edge_label] {GraphQL (Users \& Repos abfragen)} (0, 2) -- (GH.north);
+    \draw[edge_style, dashed, rounded corners=8pt] (Cons.north) -- (16, 2) -- (14, 2) -- node[edge_label] {GraphQL (Fetch Users \& Repos)} (0, 2) -- (GH.north);
 
     % Producer -> Kafka
     \draw[edge_style] (Prod.east) -- node[edge_label] {events.raw} (Kafka.west);

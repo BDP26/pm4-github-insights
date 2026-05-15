@@ -9,11 +9,14 @@
 
 %% ── Extra packages not bundled with acmart ─────────────────────────────────
 \usepackage{tabularx}          % Flexible-width table columns
+\newcolumntype{L}{>{\raggedright\arraybackslash}X} % ragged-right flexible column
 \usepackage{float}             % [H] placement specifier
 \setlength{\emergencystretch}{4pt} % Allow slight extra word-spacing before hbox overflow
 \usepackage{mdframed}          % Framed TODO boxes (safer than tcolorbox with acmart)
 \usepackage{listings}          % Code snippets (optional)
 \usepackage{tikz}
+\usepackage{rotating}
+\usepackage[export]{adjustbox}
 \usetikzlibrary{arrows.meta, positioning, fit, backgrounds, calc}
 
 %% ── Diagram colour palette (Material Design 200/300) ───────────────────────
@@ -57,15 +60,14 @@
 %% Replace with the actual rights block if submitted to an ACM venue.
 %% For the ZHAW internal hand-in, the fields below are placeholders.
 \setcopyright{none}
-\copyrightyear{2025}
-\acmYear{2025}
+\copyrightyear{2026}
+\acmYear{2026}
 \acmDOI{}
-\acmConference[PM4 FS25]{Big Data Projects}{Spring 2025}{ZHAW, Winterthur, Switzerland}
+\acmConference[PM4 FS26]{Big Data Projects}{Spring 2026}{ZHAW, Winterthur, Switzerland}
 \acmISBN{}
 
-%% Suppress the ACM reference-format line — this is an internal ZHAW report,
-%% not an ACM conference submission.
-\settopmatter{printacmref=false}
+%% Suppress ACM-submission mandatory elements — internal ZHAW report.
+\settopmatter{printacmref=false,printccs=false}
 
 %% ============================================================
 \begin{document}
@@ -125,10 +127,7 @@ organisations based on observed star and fork activity relative to each
 entity's historical baseline, across three configurable time windows
 (24\,h, 168\,h, 730\,h). Over the evaluation period the pipeline ingested
 over 21\,million events covering more than 5\,million distinct repositories
-and 217~countries at a 98.0\,\% geocoding success rate. Cohort evaluation of
-the discovery engine yielded precision values of 59\,\% (24\,h), 87\,\% (168\,h),
-and 89\,\% (730\,h), indicating that longer windows produce more stable
-momentum signals. The complete stack runs as a Docker Compose application.
+and 217~countries at a 98.0\,\% geocoding success rate.
 \end{abstract}
 
 %% ── Keywords ────────────────────────────────────────────────────────────────
@@ -192,20 +191,6 @@ Section~\ref{sec:decisions} justifies the technology choices.
 Section~\ref{sec:challenges} discusses challenges encountered.
 Section~\ref{sec:conclusion} concludes with lessons learned and future work.
 
-\paragraph{Use of generative AI.}
-\textit{Claude Sonnet~4.6}~\cite{claude-sonnet-4-6} (Anthropic, 2026) was
-used as a supporting tool during the preparation of this report. The model
-served as an aid for structuring the report outline, paraphrasing text
-passages, and reviewing the report for consistency. The critical dialogue with
-the model helped sharpen the argumentation and exposed limitations in
-generated suggestions, for example in the precise formulation of statistical
-claims, which required careful verification against the underlying
-implementation. This process fostered a more reflective approach to the
-presentation of technical results. The AI system did not contribute to the
-system design, implementation, or evaluation; all substantive results are the
-authors' own. A full listing of purposes is provided in the Generative AI
-Tool Directory at the end of this paper.
-
 %% ── 2. Related Work ─────────────────────────────────────────────────────────
 \section{Related Work}
 \label{sec:related}
@@ -240,6 +225,7 @@ enabling statistically grounded comparison across repositories of different ages
 and popularity levels, a distinction not found in existing publicly documented
 tools.
 
+\newpage
 %% ── 3. System Architecture ──────────────────────────────────────────────────
 \section{System Architecture}
 \label{sec:architecture}
@@ -280,6 +266,8 @@ Figure~\ref{fig:architecture} shows the end-to-end architecture: a streaming pip
     \texttt{photon}             & Local OpenStreetMap geocoding engine; resolves location strings to coordinates. \\
     \texttt{db-writer}          & Consumes status and rate-limit topics; persists operational metrics. \\
     \texttt{timescaledb}        & Time-series optimised SQL database for event storage and aggregation. \\
+    \texttt{api}                & FastAPI service exposing REST and SSE endpoints (port 8000); runs the snapshot scheduler. \\
+    \texttt{frontend}           & Next.js dashboard serving the end-user web interface (port 3000). \\
     \texttt{grafana}~\cite{grafana} & Operational monitoring dashboards for pipeline health and system metrics. \\
     \bottomrule
   \end{tabularx}
@@ -293,12 +281,12 @@ The \textbf{Producer} (\texttt{producer/producer.py}) serves as the entry point 
     \item \textbf{Kafka Integration:} Cleaned raw JSON data is published to the Kafka topic \texttt{github.events.raw}.
     \item \textbf{Authentication:} A single GitHub personal access token raises the API rate limit from 60 to 5\,000 requests per hour~\cite{github-rest-api}, which is sufficient for the 10-second poll cycle. The producer uses one token exclusively for polling; enrichment tokens are managed separately by the consumer.
 \end{itemize}
-
+\newpage
 \subsection{Message Broker (Kafka)}
-\textbf{Kafka} acts as the central message bus, operating in KRaft mode without the need for Zookeeper:
+\textbf{Kafka}~\cite{kafka} acts as the central message bus, operating in KRaft mode without the need for Zookeeper:
 \begin{itemize}
     \item \textbf{Decoupling:} It separates the high-frequency data ingestion (Producer) from the more complex data enrichment steps (Consumer).
-    \item \textbf{Durability:} Kafka serves as a reliable buffer; if a consumer fails, data is retained for 48 hours, allowing the system to resume where it left off.
+    \item \textbf{Durability:} Kafka serves as a reliable buffeßr; if a consumer fails, data is retained for 48 hours, allowing the system to resume where it left off.
     \item \textbf{Scalability:} The main topics are divided into three partitions, enabling parallel processing by multiple consumer instances.
     \item \textbf{Topics:} Four topics partition the payload types: raw event JSON, enrichment status, rate-limit snapshots, and geocoder request logs (single partition).
 \end{itemize}
@@ -313,6 +301,7 @@ The consumer transforms raw Kafka messages into structured, enriched records by 
     \item \textbf{REST Fallback:} If a GraphQL response returns \texttt{null} for a specific entity, the consumer issues an individual REST API call for that entity as a fallback.
     \item \textbf{Geocoding:} A dedicated \texttt{geocoder} service processes user location strings asynchronously. It claims unresolved rows from the database and queries the local Photon instance, decoupling geographic resolution from the main event-processing loop.
 \end{itemize}
+\newpage
 
 \subsection{Data Storage (TimescaleDB)}
 The project uses \textbf{TimescaleDB}~\cite{timescaledb}, an open-source time-series database built as a PostgreSQL extension, as its primary storage solution:
@@ -352,6 +341,9 @@ To implement high-performance geographic enrichment of GitHub events without rel
     \item \textbf{API Interface:} Photon provides a REST API that is queried by the \texttt{geocoder} service. It processes unstructured location strings from GitHub profiles and returns structured JSON data, including latitude, longitude, and ISO country codes.
     \item \textbf{Decoupled Enrichment:} The geocoder runs as a separate service that claims unresolved location strings from the database independently of the consumer. A failure or restart of the geocoder does not block event ingestion; unresolved locations are retried on the next run.
 \end{itemize}
+\newpage
+
+
 
 \subsection{Trending Repository Discovery}
 \label{sec:arch-hg}
@@ -376,6 +368,11 @@ FastAPI container.
 %% ── 4. Implementation ───────────────────────────────────────────────────────
 \section{Implementation}
 \label{sec:implementation}
+
+This section details the concrete implementation of each pipeline component,
+focusing on decisions that are not fully captured by the architectural overview:
+polling and deduplication logic, enrichment batching, storage configuration,
+the API and frontend design, and the Hidden Gem scoring engine.
 
 \subsection{Data Ingestion}
 
@@ -440,7 +437,7 @@ time-range aggregations compared to scanning the raw hypertable.
 
 \subsection{API Layer}
 
-The FastAPI service exposes the endpoints listed in
+The FastAPI~\cite{fastapi} service exposes the endpoints listed in
 Table~\ref{tab:endpoints}. The \texttt{/stream/events} endpoint implements
 the Server-Sent Events protocol~\cite{sse-spec}: it queries the
 \texttt{events} table (joined with \texttt{repos}) every 3 seconds
@@ -451,7 +448,7 @@ frames to prevent browser and proxy timeouts.
 \begin{table}[ht]
   \caption{FastAPI endpoint reference}
   \label{tab:endpoints}
-  \begin{tabularx}{\linewidth}{l X}
+  \begin{tabularx}{\linewidth}{l L}
     \toprule
     \textbf{Endpoint} & \textbf{Description} \\
     \midrule
@@ -468,42 +465,27 @@ frames to prevent browser and proxy timeouts.
   \end{tabularx}
 \end{table}
 
+
 \subsection{Visualisation}
 
-The Next.js~\cite{nextjs} frontend (port 3000) is built with React 19 server
-components, Tremor v3 chart components (Recharts), and Tailwind CSS 4. Server
-components fetch analytics data at request time via the internal FastAPI service;
-client components subscribe to the SSE stream through a typed \texttt{useSSE}
-hook that reconnects automatically after a 3-second back-off.
+The Next.js~\cite{nextjs} frontend (port 3000) uses React server components
+for request-time data fetching and an SSE client hook for live updates.
+The main analytics dashboard presents four KPI cards (total commits, pull
+requests, unique contributors, and average PR review time); a daily commit
+activity chart; a ranked table of the most active repositories in the preceding
+24 hours; a near-real-time event feed; and a choropleth world map with globe
+projection of event volume by country and an activity leaderboard.
 
-The main analytics dashboard presents: four KPI summary cards (total commits,
-pull requests, unique contributors, and mean time between PR open and close
-events observed within the preceding 7-day window); a daily commit
-activity chart over a configurable window; a ranked table of the most active
-repositories in the preceding 24 hours; a near-real-time event feed updated via
-SSE; a choropleth world map and a globe projection showing event volume per
-country; and an activity leaderboard of the most active accounts over a
-configurable time window.
-
-In addition to the general analytics dashboard, the frontend provides a
-dedicated \textit{Hidden Gems} section comprising four pages. The main ranking
-page presents a paginated leaderboard switchable between three entity scopes
-(repositories, users, organisations) and three time windows (24\,h, 168\,h,
-730\,h). For the repository scope, users can apply attribute filters on
-programming language, software licence, and topic tags. A global search bar with
-scope selection enables cross-entity lookup across all snapshot data.
-
-Individual detail pages are available for repositories, users, and organisations.
-Each page displays the entity's current significance score alongside a time-series
-chart of score history derived from successive snapshots. The user detail page
-additionally lists the entity's scored repositories with their individual scores.
-The organisation detail page presents two independent score aggregates: one for
-repositories directly owned by the organisation and one for repositories owned by
-its registered members. An \textit{Evaluation Reports} view embedded in the main
-ranking page exposes cohort analysis results: for a selected snapshot, each
-previously detected repository is classified as \emph{sustained} (significance
-score $\geq 1.5$ in the subsequent same-interval snapshot) or \emph{dropped}
-(score fell below threshold), with score trajectories shown.
+A dedicated \textit{Hidden Gems} section provides a paginated leaderboard
+switchable between three entity scopes (repositories, users, organisations) and
+three time windows (24\,h, 168\,h, 730\,h). Repository rankings support
+attribute filters on programming language, software licence, and topic tags;
+a global search bar enables cross-entity lookup across all snapshot data.
+Individual detail pages display each entity's significance score alongside a
+score-history chart; user pages list scored repositories with individual scores
+and organisation pages show separate aggregates for directly owned and
+member-contributed repositories. An \textit{Evaluation Reports} view exposes
+cohort classification results (see Section~\ref{sec:eval-hg}).
 
 \subsection{Hidden Gem Scoring Engine}
 \label{sec:impl-hg}
@@ -596,10 +578,11 @@ response cache to amortise aggregate query cost; filter metadata endpoints use a
 allows authorised clients to initiate an on-demand snapshot run outside the
 regular schedule.
 
+\newpage
+
 %% ── 5. Evaluation ───────────────────────────────────────────────────────────
 \section{Evaluation}
 \label{sec:evaluation}
-
 
 \subsection{Experimental Setup}
 
@@ -652,7 +635,7 @@ display.
 \begin{table}[ht]
   \caption{Pipeline throughput and GitHub API response times}
   \label{tab:throughput}
-  \begin{tabularx}{\linewidth}{l l X}
+  \begin{tabularx}{\linewidth}{l l L}
     \toprule
     \textbf{Metric} & \textbf{Value} & \textbf{Notes} \\
     \midrule
@@ -675,7 +658,7 @@ at the end of the run.
 \begin{table}[ht]
   \caption{Data coverage over evaluation period}
   \label{tab:coverage}
-  \begin{tabularx}{\linewidth}{l X}
+  \begin{tabularx}{\linewidth}{l L}
     \toprule
     \textbf{Dimension} & \textbf{Value} \\
     \midrule
@@ -696,6 +679,7 @@ GitHub event types defined in the public API specification were observed, confir
 that the collection is not biased towards specific activity types or geographic
 regions.
 
+\newpage
 \subsection{Storage Efficiency}
 
 The \texttt{events} hypertable currently spans 94 one-day chunks.
@@ -706,7 +690,8 @@ Table~\ref{tab:compression} summarises the measured storage figures.
 \begin{table}[ht]
   \caption{events hypertable compression statistics}
   \label{tab:compression}
-  \begin{tabularx}{\linewidth}{l r}
+  \centering
+  \begin{tabular}{l r}
     \toprule
     \textbf{Metric} & \textbf{Value} \\
     \midrule
@@ -717,7 +702,7 @@ Table~\ref{tab:compression} summarises the measured storage figures.
     After compression  (83 chunks)  &  4.43\,GB \\
     Overall compression ratio       & 2.9$\times$ \\
     \bottomrule
-  \end{tabularx}
+  \end{tabular}
 \end{table}
 
 The 2.9$\times$ overall ratio reflects the mixed column composition:
@@ -752,7 +737,8 @@ indicate transient activity spikes.
     sig\_score\,$\geq 1.5$ in the next same-interval snapshot;
     Precision\,=\,Sustained\,/\,Flagged.}
   \label{tab:cohort}
-  \begin{tabularx}{\linewidth}{r r r r r r}
+  \centering
+  \begin{tabular}{r r r r r r}
     \toprule
     \textbf{Window} & \textbf{Snaps.} & \textbf{Flagged} & \textbf{Sust.} & \textbf{Drop.} & \textbf{Prec.} \\
     \midrule
@@ -760,7 +746,7 @@ indicate transient activity spikes.
     168\,h & 10 & 465 & 406 &  59 & 87.3\% \\
     730\,h & 10 & 993 & 888 & 105 & 89.4\% \\
     \bottomrule
-  \end{tabularx}
+  \end{tabular}
 \end{table}
 
 \subsubsection{Score Distribution Across Snapshots}
@@ -792,7 +778,8 @@ Section~\ref{sec:eval-hg-sustained}.
     Statistics over all (repository,\,run) pairs with a non-null score.
     \emph{Scored} = unique repositories with at least one non-null score.}
   \label{tab:scoredist}
-  \begin{tabularx}{\linewidth}{r r r r r r r}
+  \centering
+  \begin{tabular}{r r r r r r r}
     \toprule
     \textbf{Win.} & \textbf{Scored} & \textbf{Mean} & \textbf{Med.}
       & \textbf{p90} & ${\geq}3.0$ & $=10$ \\
@@ -801,7 +788,7 @@ Section~\ref{sec:eval-hg-sustained}.
     168\,h &  5{,}352 & 0.59 & 0.00 & 1.13 &  7.0\% & 2.8\% \\
     730\,h &  9{,}113 & 0.89 & 0.00 & 2.39 &  9.5\% & 6.4\% \\
     \bottomrule
-  \end{tabularx}
+  \end{tabular}
 \end{table}
 
 \subsubsection{Sustained Momentum Detections}
@@ -861,7 +848,7 @@ algorithm flagged on the most distinct calendar days with sig\_score\,$\geq 3.0$
     \bottomrule
   \end{tabularx}
 \end{table*}
-
+\newpage
 %% ── 6. Technology Decision Rationale ────────────────────────────────────────
 \section{Technology Decision Rationale}
 \label{sec:decisions}
@@ -894,47 +881,44 @@ initial page load. The App Router's layout system provides a persistent
 sidebar without duplicating markup across pages. Tremor's pre-built chart
 components (AreaChart, BarChart, LineChart) accelerated dashboard development
 significantly.
-
+\newpage
 %% ── 7. Challenges ───────────────────────────────────────────────────────────
 \section{Challenges and Solutions}
 \label{sec:challenges}
 
 \paragraph{GitHub API rate limiting.}
-Without authentication, the REST API caps unauthenticated requests at
-60 per hour, which is insufficient for continuous polling. We mitigated this with
-an optional personal access token (raising the cap to 5\,000/h) and
-client-side deduplication that avoids re-publishing events already seen within
-the polling window.
+The GitHub REST API caps unauthenticated requests at 60 per hour, which is
+insufficient for continuous polling. A single personal access token raised
+the limit to 5\,000 requests per hour; as enrichment demand grew with
+parallel consumer instances, a second token was added and both rotated in
+round-robin order. The enrichment strategy was subsequently extended to a
+hybrid REST/GraphQL approach: user and organisation metadata is now fetched
+in batches of up to 20 entities per GraphQL request, reducing API calls per
+enrichment cycle. Separate token sub-pools for user/organisation and
+repository enrichment allow the pool to skip any rate-limited token and
+resume it automatically once its reset window expires.
 
-\paragraph{Geocoding deduplication across consumers.}
-GitHub user location strings are free-form text, leading to many duplicates
-across events. With three concurrent consumer instances all triggering
-geocoding, naive processing would issue redundant Photon requests for the same
-location string simultaneously. We resolved this with an optimistic-locking
-claim: before forwarding a location to Photon, the geocoder sets
-\texttt{geo\_claimed\_at = NOW()} on the user row in a single
-\texttt{UPDATE \ldots WHERE geo\_claimed\_at IS NULL} statement. Concurrent
-instances racing on the same username lose the claim and skip the request,
-ensuring each location is resolved exactly once without requiring a
-distributed lock.
+\paragraph{Geocoding at scale.}
+Geographic enrichment of free-form GitHub user location strings required a
+geocoding backend capable of handling high request volumes without external
+rate-limit constraints. An initial implementation queried the Nominatim
+public API~\cite{nominatim}; however, the API's strict usage policy (one
+request per second for public endpoints) produced a growing resolution backlog
+under the observed ingestion rate, rendering real-time enrichment
+impractical. The geocoder was consequently replaced with a local Photon
+instance (Section~\ref{sec:geocoder}), which operates against a local copy
+of the OpenStreetMap planet dataset and imposes no per-request rate
+constraint. Redundant requests across concurrent consumer instances were
+eliminated with an optimistic-locking claim: the geocoder sets
+\texttt{geo\_claimed\_at = NOW()} via a single atomic
+\texttt{UPDATE \ldots WHERE geo\_claimed\_at IS NULL}, ensuring each location
+string is resolved exactly once without requiring a distributed lock.
 
-\paragraph{Service startup ordering.}
-TimescaleDB and Kafka require 10--30 seconds after container start before
-accepting connections. Docker Compose health checks gate dependent services.
-Additionally, the FastAPI service implements an internal retry loop that
-polls the database connection every three seconds and logs progress until the
-pool is established.
-
-\paragraph{React 19 / Tremor peer dependency conflict.}
-Tremor v3 declares a React 18 peer dependency while the project uses React 19.
-Installing with \texttt{--legacy-peer-deps} bypasses the version check;
-no runtime incompatibilities were observed during development.
-
+\newpage
 
 %% ── 8. Conclusion ───────────────────────────────────────────────────────────
 \section{Conclusion and Future Work}
 \label{sec:conclusion}
-
 
 This work designed and implemented a streaming analytics pipeline for the
 GitHub public event stream, combining Apache Kafka for message transport,
@@ -972,6 +956,7 @@ ZHAW School of Engineering) for their guidance throughout the project.
 %% ── Bibliography ────────────────────────────────────────────────────────────
 \bibliographystyle{ACM-Reference-Format}
 \bibliography{references}
+\newpage
 
 %% ── Generative AI Tool Directory (ZHAW Deklarationspflicht, Ziff. 3.II) ─────
 \section*{Generative AI Tool Directory}
@@ -987,12 +972,14 @@ Anthropic. (2026). \textit{Claude Sonnet~4.6}
 \end{itemize}
 
 %% ── Appendix ────────────────────────────────────────────────────────────────
+\clearpage
+\onecolumn
 \appendix
 
 \section{Full System Architecture}
 \label{appendix:arch-full}
 
-\begin{figure*}[ht]
+\begin{figure}[h]
   \centering
   \includegraphics[width=\textwidth]{diagrams/system-architecture-full}
   \caption{Full annotated system architecture diagram. All seven layers are
@@ -1002,7 +989,8 @@ Anthropic. (2026). \textit{Claude Sonnet~4.6}
     Kafka broker, Consumer instances, Geocoder, TimescaleDB, FastAPI, Next.js
     frontend, and Grafana with all data-flow arrows and labels.}
   \label{fig:arch-full}
-\end{figure*}
+\end{figure}
+
 
 \section{Project Timeline}
 
@@ -1022,12 +1010,15 @@ Anthropic. (2026). \textit{Claude Sonnet~4.6}
   \end{tabularx}
 \end{table}
 
+\clearpage
+\onecolumn
 \section{Database Schema}
 \label{appendix:schema}
 
 %% ── DB Schema Diagram 1: Core Star Schema ───────────────────────────────────
-\begin{figure*}[ht]
+\begin{figure*}[h]
 \centering
+{\hbadness=10000
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[x=1cm, y=1cm]
 
@@ -1097,7 +1088,7 @@ Anthropic. (2026). \textit{Claude Sonnet~4.6}
 \draw[fkarr] (orgmem.north west) to[bend right=15] node[midway, left, font=\fontsize{6}{7}\selectfont\sffamily] {user\_username} (users.south east);
 
 \end{tikzpicture}%
-}
+}}
 \caption{Core star schema. \texttt{events} is the central fact hypertable;
   \texttt{users}, \texttt{repos}, and \texttt{organizations} are dimension
   tables; \texttt{organization\_members} is a junction table with enforced
@@ -1113,8 +1104,9 @@ Anthropic. (2026). \textit{Claude Sonnet~4.6}
 \end{figure*}
 
 %% ── DB Schema Diagram 2: Hidden Gem Snapshot Tables ─────────────────────────
-\begin{figure*}[ht]
+\begin{figure*}[t]
 \centering
+{\hbadness=10000
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[x=1cm, y=1cm]
 
@@ -1171,7 +1163,7 @@ Anthropic. (2026). \textit{Claude Sonnet~4.6}
 \draw[fkarr] (sorgs.north) to[bend left=20] node[midway, right, font=\fontsize{6}{7}\selectfont\sffamily] {snapshot\_id} (runs.south east);
 
 \end{tikzpicture}%
-}
+}}
 \caption{Hidden Gem snapshot tables. \texttt{hidden\_gem\_snapshot\_runs}
   is the header record for each scoring run (one per interval per
   invocation); the three child tables store per-repo, per-user, and per-org
@@ -1184,8 +1176,9 @@ Anthropic. (2026). \textit{Claude Sonnet~4.6}
 \end{figure*}
 
 %% ── DB Schema Diagram 3: Operational (standalone) Tables ─────────────────────
-\begin{figure*}[ht]
+\begin{figure*}[t]
 \centering
+{\hbadness=10000
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[x=1cm, y=1cm]
 
@@ -1232,7 +1225,7 @@ Anthropic. (2026). \textit{Claude Sonnet~4.6}
 % No FK arrows — these tables are standalone
 
 \end{tikzpicture}%
-}
+}}
 \caption{Operational log tables. These three tables record HTTP request logs
   for the GitHub REST/GraphQL API (\texttt{request\_logs}), GitHub API rate-limit
   snapshots (\texttt{rate\_limit\_snapshots}), and Photon geocoder request logs
@@ -1244,6 +1237,7 @@ Anthropic. (2026). \textit{Claude Sonnet~4.6}
 \label{fig:db-operational}
 \end{figure*}
 
+\clearpage
 \section{Deployment Quick Reference}
 
 \begin{verbatim}
