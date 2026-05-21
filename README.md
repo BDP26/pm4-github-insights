@@ -1,8 +1,21 @@
-# GitHub Events Streaming Stack
+# GitHub Insights
 
-Real-time pipeline that ingests the GitHub public events API into Kafka,
+Streaming pipeline that ingests the GitHub public events API into Kafka,
 enriches each event with geographic + profile data, stores everything in
-TimescaleDB, and visualises it live in a Next.js dashboard and Grafana.
+TimescaleDB, and surfaces trends live via a Next.js dashboard and Grafana.
+
+---
+
+## 🌐 Live Demo
+
+> **The dashboard is currently running** and can be accessed at:
+>
+> **[https://github-insights.gampegia.dev/](https://github-insights.gampegia.dev/)**
+>
+> The instance will remain live until the end of the semester, when the VM is shut down.
+> To obtain the password, contact **[gampegia@students.zhaw.ch](mailto:gampegia@students.zhaw.ch)**.
+>
+> Read the **[project blog post](https://bdp26.github.io/2026/05/21/github-insights/)** for an overview of the pipeline architecture, results at scale, and the Hidden Gems discovery engine.
 
 ---
 
@@ -32,8 +45,8 @@ GitHub API
 │  • Fetches GitHub user/repo data    │
 │  • Writes enriched rows to DB       │
 │  • Background thread: geocodes      │
-│    location strings (Nominatim,     │
-│    1 req/s) without blocking Kafka  │
+│    location strings via local       │
+│    Photon without blocking Kafka    │
 │  • Supports 1 or 3 instances        │
 │    (partition-pinned via assign())  │
 └──────────────┬──────────────────────┘
@@ -138,7 +151,7 @@ erDiagram
 | Service | Port | Description |
 |---|---|---|
 | **frontend** | 3000 | Next.js dashboard with live event stream |
-| **api** | 8000 | FastAPI — REST endpoints + SSE stream |
+| **api** | 8000 | FastAPI: REST endpoints + SSE stream |
 | **grafana** | 3001 | Grafana dashboards (admin / admin) |
 | **kafka-ui** | 8080 | Kafka topic browser |
 | **timescaledb** | 5432 | TimescaleDB (PostgreSQL 16) |
@@ -155,7 +168,7 @@ erDiagram
 ### 1. Clone and enter the repo
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/BDP26/pm4-github-insights.git
 cd pm4-github-insights
 ```
 
@@ -165,7 +178,7 @@ cd pm4-github-insights
 cp .env.example .env
 ```
 
-Open `.env` and optionally add GitHub tokens (strongly recommended — increases rate limit from 60 to 5 000 req/h):
+Open `.env` and optionally add GitHub tokens (strongly recommended; increases rate limit from 60 to 5 000 req/h):
 
 ```dotenv
 GITHUB_TOKEN_EVENTS=ghp_your_token_here   # producer: poll public events API
@@ -182,7 +195,7 @@ docker compose --profile single-consumer up --build
 First start takes a few minutes while images are pulled and built.
 Kafka topic creation and DB schema initialisation happen automatically.
 
-> **Multi-instance mode** — to run 3 partition-pinned consumer instances in parallel (useful when consumer lag is building up):
+> **Multi-instance mode**: to run 3 partition-pinned consumer instances in parallel (useful when consumer lag is building up):
 > ```bash
 > docker compose --profile multi-consumer up --build
 > ```
@@ -205,11 +218,11 @@ docker compose down -v       # stop containers AND delete all data
 
 ---
 
-## Docker commands — when to use what
+## Docker commands: when to use what
 
 ### After changing Python code (consumer or producer)
 
-Rebuild only the affected container — infrastructure stays up, data is preserved.
+Rebuild only the affected container; infrastructure stays up, data is preserved.
 
 ```bash
 # Consumer changed (consumer/consumer.py or consumer/Dockerfile)
@@ -227,7 +240,7 @@ docker compose --profile single-consumer up -d --build consumer producer
 
 ### After changing Grafana dashboards / provisioning
 
-Grafana config is mounted as a volume — just restart the container, no rebuild needed.
+Grafana config is mounted as a volume; just restart the container, no rebuild needed.
 
 ```bash
 docker compose restart grafana
@@ -251,7 +264,7 @@ docker exec -i timescaledb psql -U github -d github_events \
   < db/migrations/001_add_is_bot_to_users.sql
 ```
 
-Verify the migration ran cleanly — look for `ALTER TABLE`, `CREATE ...` lines and no `ERROR:` lines.
+Verify the migration ran cleanly: look for `ALTER TABLE`, `CREATE ...` lines and no `ERROR:` lines.
 
 ### Full teardown and rebuild (e.g. after infra changes)
 
@@ -259,7 +272,7 @@ Verify the migration ran cleanly — look for `ALTER TABLE`, `CREATE ...` lines 
 docker compose down                                        # keep volumes (preserves DB data)
 docker compose --profile single-consumer up --build        # rebuild all images
 
-# OR — start completely fresh (deletes all data)
+# OR: start completely fresh (deletes all data)
 docker compose down -v
 docker compose --profile single-consumer up --build
 ```
@@ -344,13 +357,13 @@ SELECT username, fetched_at FROM users WHERE is_bot = TRUE ORDER BY fetched_at D
 
 - Decouples the rate-limited GitHub poller from the slow geo-enrichment step
 - Allows multiple consumers (e.g. add a Flink job later without touching the producer)
-- Acts as a durable replay buffer — if the consumer crashes, it picks up where it left off
+- Acts as a durable replay buffer: if the consumer crashes, it picks up where it left off
 
-### TimescaleDB (storage) — not plain Postgres, not Neo4j
+### TimescaleDB (storage): not plain Postgres, not Neo4j
 
 | Option | Verdict |
 |---|---|
-| Plain PostgreSQL | Missing time-series indexes & compression — gets slow at scale |
+| Plain PostgreSQL | Missing time-series indexes & compression; gets slow at scale |
 | **TimescaleDB** ✅ | Hypertables = automatic chunking by time. 10-20× compression. Continuous aggregates pre-compute rollups. First-class Grafana support |
 | InfluxDB | Good for pure metrics but no SQL, weak JOIN support for enrichment queries |
 | Graph DB (Neo4j) | Excellent for "actor→repo→org" relationship queries but overkill here; you'd need a second DB for time-series anyway |
@@ -363,7 +376,7 @@ SELECT username, fetched_at FROM users WHERE is_bot = TRUE ORDER BY fetched_at D
 - Native TimescaleDB/PostgreSQL data source
 - World-map panel for geo distribution
 - Auto-refresh every 10 s matches the poll interval
-- No extra backend needed — Grafana queries the continuous aggregates directly
+- No extra backend needed; Grafana queries the continuous aggregates directly
 
 ---
 
