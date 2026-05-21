@@ -15,7 +15,7 @@ TimescaleDB, and surfaces trends live via a Next.js dashboard and Grafana.
 > The instance will remain live until the end of the semester, when the VM is shut down.
 > To obtain the password, contact **[gampegia@students.zhaw.ch](mailto:gampegia@students.zhaw.ch)**.
 >
-> Read the **[project blog post](https://bdp26.github.io/2026/05/21/github-insights/)** for an overview of the pipeline architecture, results at scale, and the Hidden Gems discovery engine.
+> Read the **[project blog post](https://bdp26.github.io/2026/05/21/github-insights.html)** for an overview of the pipeline architecture, results at scale, and the Hidden Gems discovery engine.
 
 ---
 
