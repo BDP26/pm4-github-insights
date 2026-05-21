@@ -149,8 +149,6 @@ and 217~countries at a 98.0\,\% geocoding success rate.
 %%   \label{fig:teaser}
 %% \end{teaserfigure}
 
-\received{January 2025}
-\received[revised]{May 2026}
 
 %% ============================================================
 \maketitle
@@ -1240,26 +1238,17 @@ Anthropic. (2026). \textit{Claude Sonnet~4.6}
 \clearpage
 \section{Deployment Quick Reference}
 
-\begin{verbatim}
-# 1. Clone and configure
-git clone <repo-url> && cd pm4-github-insights
-cp .env.example .env           # add GITHUB_TOKEN
+The full setup instructions, environment variable reference, and operational
+runbook are maintained in the project repository and kept up to date alongside
+the codebase:
 
-# 2. Start all services
-docker compose up --build
+\begin{center}
+  \url{https://github.com/BDP26/pm4-github-insights}
+\end{center}
 
-# 3. Access UIs
-#   http://localhost:3000  Next.js dashboard
-#   http://localhost:8000/docs  FastAPI Swagger UI
-#   http://localhost:3001  Grafana  (admin / admin)
-#   http://localhost:8080  Kafka-UI
-
-# 4. Open a DB session
-docker exec -it timescaledb \
-  psql -U github -d github_events
-\end{verbatim}
-
-See \texttt{docs/RUNBOOK.md} and \texttt{docs/ENV.md} for the full
-operational reference and environment variable documentation.
+The repository \texttt{README.md} covers prerequisites, Docker Compose
+profiles, and service URLs. \texttt{docs/RUNBOOK.md} and \texttt{docs/ENV.md}
+document operational procedures and environment variable configuration
+respectively.
 
 \end{document}
