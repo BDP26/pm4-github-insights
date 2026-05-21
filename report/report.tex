@@ -1,5 +1,5 @@
 %%
-%% GitHub Innovation Portal — Final Project Report
+%% GitHub Insights — Final Project Report
 %% PM4 Big Data Projects, ZHAW School of Engineering, FS25
 %%
 %% Built on the ACM sigconf template (acmart document class).
@@ -74,8 +74,8 @@
 %% ============================================================
 
 %% ── Title ───────────────────────────────────────────────────────────────────
-\title{GitHub Innovation Portal}
-\subtitle{A Real-Time Open-Source Trend Analytics Platform}
+\title{GitHub Insights}
+\subtitle{Streaming Analytics for GitHub Repository Trend Detection}
 
 %% ── Authors ─────────────────────────────────────────────────────────────────
 \author{Jann Erhardt}
@@ -112,7 +112,7 @@
 GitHub's public event stream exposes a continuous feed of repository activity
 spanning commits, pull requests, forks, and releases. Identifying early-stage
 projects with genuine momentum from this feed is impractical without automated
-analysis. This paper presents the \textit{GitHub Innovation Portal}, a streaming
+analysis. This paper presents \textit{GitHub Insights}, a streaming
 analytics platform that continuously ingests the GitHub public events API,
 enriches the associated user and repository records with geographic and profile
 metadata, and surfaces statistically significant growth trends through a web
@@ -132,7 +132,7 @@ and 217~countries at a 98.0\,\% geocoding success rate.
 
 %% ── Keywords ────────────────────────────────────────────────────────────────
 \keywords{stream processing, GitHub event API, Apache Kafka, TimescaleDB,
-  real-time analytics, open-source trend detection, geo-enrichment,
+  streaming analytics, open-source trend detection, geo-enrichment,
   Server-Sent Events, Next.js dashboard}
 
 %% ── Teaser figure ───────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ and 217~countries at a 98.0\,\% geocoding success rate.
 %%
 %% \begin{teaserfigure}
 %%   \includegraphics[width=\textwidth]{dashboard-overview}
-%%   \caption{The GitHub Innovation Portal dashboard showing live KPI cards,
+%%   \caption{The GitHub Insights dashboard showing live KPI cards,
 %%     commit trend, top repositories, and the real-time event feed.}
 %%   \Description{Screenshot of the Next.js dashboard with four KPI metric
 %%     cards at the top, an area chart of commits over time, a bar chart of
@@ -172,7 +172,7 @@ visible in the live event stream. A repository that doubles its commit
 frequency or attracts contributors from three continents in a single day
 represents a signal of genuine innovation; today that signal is largely wasted.
 
-This project addresses the gap with the \textit{GitHub Innovation Portal}:
+This project addresses the gap with \textit{GitHub Insights}:
 an end-to-end streaming analytics platform that continuously ingests the
 GitHub public events API, enriches the associated user and repository records
 with geographic and profile metadata, persists the data in a time-series
@@ -233,7 +233,7 @@ tools.
 \begin{figure*}[t]
   \centering
   \includegraphics[width=\textwidth]{diagrams/system-architecture}
-  \caption{Simplified end-to-end architecture of the GitHub Innovation Portal.
+  \caption{Simplified end-to-end architecture of GitHub Insights.
     Events flow from the GitHub API through Kafka (KRaft) into TimescaleDB,
     where they are served by FastAPI to the Next.js dashboard and Grafana.
     Dashed arrows indicate auxiliary data flows.
@@ -286,7 +286,7 @@ The \textbf{Producer} (\texttt{producer/producer.py}) serves as the entry point 
 \textbf{Kafka}~\cite{kafka} acts as the central message bus, operating in KRaft mode without the need for Zookeeper:
 \begin{itemize}
     \item \textbf{Decoupling:} It separates the high-frequency data ingestion (Producer) from the more complex data enrichment steps (Consumer).
-    \item \textbf{Durability:} Kafka serves as a reliable buffeßr; if a consumer fails, data is retained for 48 hours, allowing the system to resume where it left off.
+    \item \textbf{Durability:} Kafka serves as a reliable buffer; if a consumer fails, data is retained for 48 hours, allowing the system to resume where it left off.
     \item \textbf{Scalability:} The main topics are divided into three partitions, enabling parallel processing by multiple consumer instances.
     \item \textbf{Topics:} Four topics partition the payload types: raw event JSON, enrichment status, rate-limit snapshots, and geocoder request logs (single partition).
 \end{itemize}
